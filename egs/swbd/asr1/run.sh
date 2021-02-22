@@ -36,14 +36,15 @@ n_average=10
 lang_model=rnnlm.model.best # set a language model to be used for decoding
 
 # data
-swbd1_dir=/export/corpora3/LDC/LDC97S62
-eval2000_dir="/export/corpora2/LDC/LDC2002S09/hub5e_00 /export/corpora2/LDC/LDC2002T43"
-rt03_dir=/export/corpora/LDC/LDC2007S10
+swbd1_dir=/data/ASR1/sdalmia/corpus/swbd/LDC97S62
+eval2000_dir="/data/ASR1/sdalmia/corpus/swbd/LDC2002S09/hub5e_00 /data/ASR1/sdalmia/corpus/swbd/LDC2002T43"
+rt03_dir=/data/ASR1/sdalmia/corpus/swbd/LDC2007S10
 # path to the Fisher corpus LDC2004T19 LDC2005T19 LDC2004S13 LDC2005S13 for LM training (optional)
-fisher_dir="/export/corpora3/LDC/LDC2004T19 /export/corpora3/LDC/LDC2005T19 /export/corpora3/LDC/LDC2004S13 /export/corpora3/LDC/LDC2005S13"
+#fisher_dir="/export/corpora3/LDC/LDC2004T19 /export/corpora3/LDC/LDC2005T19 /export/corpora3/LDC/LDC2004S13 /export/corpora3/LDC/LDC2005S13"
+fisher_dir=
 
 # bpemode (unigram or bpe)
-nbpe=2000
+nbpe=100
 bpemode=bpe
 
 # exp tag
@@ -57,7 +58,7 @@ set -e
 set -u
 set -o pipefail
 
-train_set=train_nodup_sp
+train_set=train_nodup_trim
 train_dev=train_dev_trim
 recog_set="train_dev_trim eval2000 rt03"
 
@@ -101,11 +102,11 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     echo "stage 1: Feature Generation"
     fbankdir=fbank
     # Generate the fbank features; by default 80-dimensional fbanks with pitch on each frame
-    for x in train eval2000 rt03; do
-        steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 32 --write_utt2num_frames true \
-            data/${x} exp/make_fbank/${x} ${fbankdir}
-        utils/fix_data_dir.sh data/${x}
-    done
+    #for x in train eval2000 rt03; do
+    #    steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 32 --write_utt2num_frames true \
+    #        data/${x} exp/make_fbank/${x} ${fbankdir}
+    #    utils/fix_data_dir.sh data/${x}
+    #done
 
     utils/subset_data_dir.sh --first data/train 4000 data/train_dev # 5hr 6min
     n=$(($(wc -l < data/train/segments) - 4000))
@@ -114,15 +115,15 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
 
     # remove utt having > 2000 frames or < 10 frames or
     # remove utt having > 400 characters or 0 characters
-    remove_longshortdata.sh --maxchars 400 data/train data/train_nodup_trim
-    remove_longshortdata.sh --maxchars 400 data/dev data/${train_dev}
+    remove_longshortdata.sh --maxchars 400 data/train_nodup data/train_nodup_trim
+    remove_longshortdata.sh --maxchars 400 data/train_dev data/${train_dev}
 
-    # speed-perturbed
-    utils/perturb_data_dir_speed.sh 0.9 data/train_nodup_trim data/temp1
-    utils/perturb_data_dir_speed.sh 1.0 data/train_nodup_trim data/temp2
-    utils/perturb_data_dir_speed.sh 1.1 data/train_nodup_trim data/temp3
-    utils/combine_data.sh --extra-files utt2uniq data/${train_set} data/temp1 data/temp2 data/temp3
-    rm -r data/temp1 data/temp2 data/temp3
+    ## speed-perturbed
+    #utils/perturb_data_dir_speed.sh 0.9 data/train_nodup_trim data/temp1
+    #utils/perturb_data_dir_speed.sh 1.0 data/train_nodup_trim data/temp2
+    #utils/perturb_data_dir_speed.sh 1.1 data/train_nodup_trim data/temp3
+    #utils/combine_data.sh --extra-files utt2uniq data/${train_set} data/temp1 data/temp2 data/temp3
+    #rm -r data/temp1 data/temp2 data/temp3
     steps/make_fbank_pitch.sh --cmd "$train_cmd" --nj 32 --write_utt2num_frames true \
         data/${train_set} exp/make_fbank/${train_set} ${fbankdir}
     utils/fix_data_dir.sh data/${train_set}
@@ -257,6 +258,8 @@ else
 fi
 expdir=exp/${expname}
 mkdir -p ${expdir}
+
+exit 1;
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     echo "stage 4: Network Training"
