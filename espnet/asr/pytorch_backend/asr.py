@@ -1094,13 +1094,19 @@ def recog(args):
                 elif hasattr(model, "rnnt_mode"):
                     nbest_hyps = model.recognize(feat, beam_search_transducer)
                 else:
-                    # add cat
-                    nbest_hyps, ph_hyps, align = model.recognize(
+                    # add posterior
+                    nbest_hyps, ph_hyps, align, mat = model.recognize(
                         feat, cat, args, train_args.char_list, rnnlm
                     )
+                    ## add cat
+                    #nbest_hyps, ph_hyps, align, mat = model.recognize(
+                    #    feat, cat, args, train_args.char_list, rnnlm
+                    #)
                 new_js[name] = add_results_to_json(
                         js[name], nbest_hyps, ph_hyps, train_args.char_list, align
                 )
+                np_out='/project/ocean/byan/espnet-ml/egs/babel/asr1/posterior_dump/'+str(cat)+'/'+name
+                np.save(np_out, mat.numpy())
 
     else:
 

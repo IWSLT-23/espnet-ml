@@ -269,18 +269,22 @@ class E2E(ASRInterface, torch.nn.Module):
             args.transformer_length_normalized_loss,
         )
         #self.criterion = {}
-        self.sos = {}
-        self.eos = {}
-        self.odim = odim
-        for lid in alloWdict.keys():
-            #self.criterion[lid] = LabelSmoothingLoss(
-            #    odim[lid],
-            #    ignore_id,
-            #    args.lsm_weight,
-            #    args.transformer_length_normalized_loss,
-            #)
-            self.sos[lid] = odim[lid] - 1
-            self.eos[lid] = odim[lid] - 1
+        if type(odim) is int:
+            self.sos = odim - 1
+            self.eos = odim - 1
+            self.odim = odim
+        else:
+            self.eos = {}
+            self.odim = odim
+            for lid in alloWdict.keys():
+                #self.criterion[lid] = LabelSmoothingLoss(
+                #    odim[lid],
+                #    ignore_id,
+                #    args.lsm_weight,
+                #    args.transformer_length_normalized_loss,
+                #)
+                self.sos[lid] = odim[lid] - 1
+                self.eos[lid] = odim[lid] - 1
         
         # phone output
         #self.phone_out = torch.nn.Sequential(
@@ -580,7 +584,8 @@ class E2E(ASRInterface, torch.nn.Module):
             collapsed_indices = [x[0] for x in groupby(ph_hyps)]
             ph_hyps = [x.item() for x in filter(lambda x: x != self.blank, collapsed_indices)]
 
-            return nbest_hyps, ph_hyps, align
+            return nbest_hyps, ph_hyps, align, mat  #add mat for dump posteriors
+            #return nbest_hyps, ph_hyps, align
             #return nbest_hyps, ph_hyps, align, beam_hyp
         elif self.pn_type == 'ctc6':
             from itertools import groupby
