@@ -12,10 +12,10 @@ else:
 EOF
 )
 
-if ! [[ "$cuda_version" =~ ^(100|101|102)$ ]]; then
-    echo "warp-rnnt was not tested with CUDA_VERSION=$cuda_version. Skipping install."
-    exit 0
-fi
+#if ! [[ "$cuda_version" =~ ^(100|101|102)$ ]]; then
+#    echo "warp-rnnt was not tested with CUDA_VERSION=$cuda_version. Skipping install."
+#    exit 0
+#fi
 
 # TODO(kamo): Consider clang case
 # Note: Requires gcc>=5.4 to build extensions with pytorch>=1.0

@@ -232,7 +232,6 @@ def load_trained_modules(idim, odim, args, interface=ASRInterface):
         model (torch.nn.Module): The model with pretrained modules.
 
     """
-
     def print_new_keys(state_dict, modules, model_path):
         logging.warning("loading %s from model: %s", modules, model_path)
 
@@ -262,6 +261,77 @@ def load_trained_modules(idim, odim, args, interface=ASRInterface):
                 modules = filter_modules(model_state_dict, modules)
 
                 partial_state_dict = get_partial_state_dict(model_state_dict, modules)
+
+                if partial_state_dict:
+                    if transfer_verification(
+                        main_state_dict, partial_state_dict, modules
+                    ):
+                        print_new_keys(partial_state_dict, modules, model_path)
+                        main_state_dict.update(partial_state_dict)
+                    else:
+                        logging.warning(
+                            f"modules {modules} in model {model_path} "
+                            f"don't match your training config",
+                        )
+            else:
+                logging.warning("model was not found : %s", model_path)
+
+    main_model.load_state_dict(main_state_dict)
+
+    return main_model
+
+def load_trained_modules_cs(idim, odim, args, interface=ASRInterface):
+    """Load model encoder or/and decoder modules with ESPNET pre-trained model(s).
+
+    Args:
+        idim (int): initial input dimension.
+        odim (int): initial output dimension.
+        args (Namespace): The initial model arguments.
+        interface (Interface): ASRInterface or STInterface or TTSInterface.
+
+    Return:
+        model (torch.nn.Module): The model with pretrained modules.
+
+    """
+    def print_new_keys(state_dict, modules, model_path):
+        logging.warning("loading %s from model: %s", modules, model_path)
+
+        for k in state_dict.keys():
+            logging.warning("override %s" % k)
+
+    zh_model_path = args.zh_init
+    en_model_path = args.en_init
+    zh_modules = args.zh_init_mods
+    en_modules = args.en_init_mods
+
+    model_class = dynamic_import(args.model_module)
+    main_model = model_class(idim, odim, args)
+    assert isinstance(main_model, interface)
+
+    main_state_dict = main_model.state_dict()
+
+    logging.warning("model(s) found for pre-initialization")
+    for model_path, modules, lang in [
+        (zh_model_path, zh_modules, "zh"),
+        (en_model_path, en_modules, "en"),
+    ]:
+        if model_path is not None:
+            if os.path.isfile(model_path):
+                model_state_dict = get_trained_model_state_dict(model_path)
+
+                modules = filter_modules(model_state_dict, modules)
+
+                partial_state_dict = get_partial_state_dict(model_state_dict, modules)
+
+                # rename with lang prefix
+                renamed_partial_state_dict = OrderedDict()
+                for k in partial_state_dict.keys():
+                    renamed_partial_state_dict[lang+"_"+k] = partial_state_dict[k]
+                renamed_modules = []
+                for m in modules:
+                    renamed_modules.append(lang+"_"+m)
+                partial_state_dict = renamed_partial_state_dict
+                modules = renamed_modules
 
                 if partial_state_dict:
                     if transfer_verification(

@@ -29,6 +29,7 @@ from espnet.nets.pytorch_backend.transducer.auxiliary_task import AuxiliaryTask
 from espnet.nets.pytorch_backend.transducer.custom_decoder import CustomDecoder
 from espnet.nets.pytorch_backend.transducer.custom_encoder import CustomEncoder
 from espnet.nets.pytorch_backend.transducer.error_calculator import ErrorCalculator
+from espnet.nets.e2e_asr_common import ErrorCalculator as ErrorCalculatorCTC
 from espnet.nets.pytorch_backend.transducer.initializer import initializer
 from espnet.nets.pytorch_backend.transducer.joint_network import JointNetwork
 from espnet.nets.pytorch_backend.transducer.loss import TransLoss
@@ -47,6 +48,17 @@ from espnet.nets.pytorch_backend.transformer.mask import target_mask
 from espnet.nets.pytorch_backend.transformer.plot import PlotAttentionReport
 from espnet.utils.fill_missing_args import fill_missing_args
 
+from espnet.nets.pytorch_backend.conformer.argument import (
+    add_arguments_conformer_common,  # noqa: H301
+    verify_rel_pos_type,  # noqa: H301
+)
+
+from espnet.nets.pytorch_backend.transformer.argument import (
+    add_arguments_transformer_for_cond1,  # noqa: H301
+)
+
+from espnet.nets.pytorch_backend.conformer.encoder import Encoder
+from espnet.nets.pytorch_backend.ctc import CTC
 
 class Reporter(chainer.Chain):
     """A chainer reporter wrapper for transducer models."""
@@ -61,6 +73,10 @@ class Reporter(chainer.Chain):
         loss_aux_symm_kl,
         cer,
         wer,
+        zh_ctc_loss,
+        en_ctc_loss,
+        zh_cer,
+        en_cer
     ):
         """Instantiate reporter attributes."""
         chainer.reporter.report({"loss": loss}, self)
@@ -71,6 +87,10 @@ class Reporter(chainer.Chain):
         chainer.reporter.report({"loss_aux_symm_kl": loss_aux_symm_kl}, self)
         chainer.reporter.report({"cer": cer}, self)
         chainer.reporter.report({"wer": wer}, self)
+        chainer.reporter.report({"zh_ctc_loss": zh_ctc_loss}, self)
+        chainer.reporter.report({"en_ctc_loss": en_ctc_loss}, self)
+        chainer.reporter.report({"zh_cer": zh_cer}, self)
+        chainer.reporter.report({"en_cer": en_cer}, self)
 
         logging.info("loss:" + str(loss))
 
@@ -102,6 +122,11 @@ class E2E(ASRInterface, torch.nn.Module):
         E2E.transducer_add_arguments(parser)
         E2E.auxiliary_task_add_arguments(parser)
 
+        group = parser.add_argument_group("conformer model specific setting")
+        group = add_arguments_conformer_common(group)
+
+        group = parser.add_argument_group("transformer model setting")
+        group = add_arguments_transformer_for_cond1(group)
         return parser
 
     @staticmethod
@@ -341,6 +366,13 @@ class E2E(ASRInterface, torch.nn.Module):
                     args.report_cer,
                     args.report_wer,
                 )
+                self.error_calculator_ctc = ErrorCalculatorCTC(
+                    args.char_list,
+                    args.sym_space,
+                    args.sym_blank,
+                    args.report_cer,
+                    args.report_wer,
+                )
 
             if self.use_aux_task:
                 self.auxiliary_task = AuxiliaryTask(
@@ -374,6 +406,57 @@ class E2E(ASRInterface, torch.nn.Module):
         self.loss = None
         self.rnnlm = None
 
+        # Cond
+        self.cond_weight = args.cond_weight
+        self.fusion_type = args.fusion_type
+        # zh encoder
+        if args.transformer_attn_dropout_rate is None:
+            args.transformer_attn_dropout_rate = args.dropout_rate
+        self.cond_adim = args.adim
+        self.zh_encoder = Encoder(
+            idim=idim,
+            attention_dim=args.adim,
+            attention_heads=args.aheads,
+            linear_units=args.cond_eunits,
+            num_blocks=args.cond_elayers,
+            input_layer=args.transformer_input_layer,
+            dropout_rate=args.cond_dropout_rate,
+            positional_dropout_rate=args.cond_dropout_rate,
+            attention_dropout_rate=args.transformer_attn_dropout_rate,
+            pos_enc_layer_type=args.transformer_encoder_pos_enc_layer_type,
+            selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+            activation_type=args.transformer_encoder_activation_type,
+            macaron_style=args.macaron_style,
+            use_cnn_module=args.use_cnn_module,
+            zero_triu=args.zero_triu,
+            cnn_module_kernel=args.cnn_module_kernel,
+        )
+        self.zh_ctc = CTC(
+            odim, args.adim, args.cond_dropout_rate, ctc_type=args.ctc_type, reduce=True
+        )
+        # en encoder
+        self.en_encoder = Encoder(
+            idim=idim,
+            attention_dim=args.adim,
+            attention_heads=args.aheads,
+            linear_units=args.cond_eunits,
+            num_blocks=args.cond_elayers,
+            input_layer=args.transformer_input_layer,
+            dropout_rate=args.cond_dropout_rate,
+            positional_dropout_rate=args.cond_dropout_rate,
+            attention_dropout_rate=args.transformer_attn_dropout_rate,
+            pos_enc_layer_type=args.transformer_encoder_pos_enc_layer_type,
+            selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+            activation_type=args.transformer_encoder_activation_type,
+            macaron_style=args.macaron_style,
+            use_cnn_module=args.use_cnn_module,
+            zero_triu=args.zero_triu,
+            cnn_module_kernel=args.cnn_module_kernel,
+        )
+        self.en_ctc = CTC(
+            odim, args.adim, args.cond_dropout_rate, ctc_type=args.ctc_type, reduce=True
+        )
+
     def default_parameters(self, args):
         """Initialize/reset parameters for transducer.
 
@@ -395,13 +478,38 @@ class E2E(ASRInterface, torch.nn.Module):
             loss (torch.Tensor): transducer loss value
 
         """
-        # 1. encoder
+        
+        # Cond encoders
         xs_pad = xs_pad[:, : max(ilens)]
+        src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
+        zh_hs_pad, hs_mask = self.zh_encoder(xs_pad, src_mask)    #hs_masks are all the same
+        en_hs_pad, _ = self.en_encoder(xs_pad, src_mask)
+        # make zh and en gts
+        # zh is all from 5000 onwards
+        zh_ys_pad = ys_pad.masked_fill(~(ys_pad >= 5000), -1)
+        # en is < 5000 and including lid tags
+        en_ys_pad = ys_pad.masked_fill(~((ys_pad < 5000) | (ys_pad >= 11237)), -1)
+        # ctc losses
+        batch_size = xs_pad.size(0)
+        hs_len = hs_mask.view(batch_size, -1).sum(1)
+        zh_ctc_loss = self.zh_ctc(zh_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, zh_ys_pad)
+        en_ctc_loss = self.en_ctc(en_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, en_ys_pad)
+        # logging
+        if not self.training and self.error_calculator_ctc is not None:
+            zh_ys_hat = self.zh_ctc.argmax(zh_hs_pad.view(batch_size, -1, self.cond_adim)).data
+            zh_cer_ctc = self.error_calculator_ctc(zh_ys_hat.cpu(), zh_ys_pad.cpu(), is_ctc=True)
 
+            en_ys_hat = self.en_ctc.argmax(en_hs_pad.view(batch_size, -1, self.cond_adim)).data
+            en_cer_ctc = self.error_calculator_ctc(en_ys_hat.cpu(), en_ys_pad.cpu(), is_ctc=True)
+        else:
+            zh_cer_ctc = None
+            en_cer_ctc = None
+
+        # 1. encoder
         if "custom" in self.etype:
-            src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
+            # src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)  #this is duplicated
 
-            _hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
+            _hs_pad, _ = self.encoder(xs_pad, src_mask)     #hs_masks are all the same
         else:
             _hs_pad, hs_mask, _ = self.enc(xs_pad, ilens)
 
@@ -415,6 +523,12 @@ class E2E(ASRInterface, torch.nn.Module):
             ys_pad, hs_mask
         )
 
+        # Fusion of Cond encoders with rnnt encoder
+        if self.fusion_type == "add":
+            hs_pad = hs_pad + zh_hs_pad + en_hs_pad
+        else:
+            import pdb;pdb.set_trace()
+
         # 2. decoder
         if "custom" in self.dtype:
             ys_mask = target_mask(ys_in_pad, self.blank_id)
@@ -427,37 +541,43 @@ class E2E(ASRInterface, torch.nn.Module):
         # 3. loss computation
         loss_trans = self.criterion(z, target, pred_len, target_len)
 
-        if self.use_aux_task and aux_hs_pad is not None:
-            loss_aux_trans, loss_aux_symm_kl = self.auxiliary_task(
-                aux_hs_pad, pred_pad, z, target, pred_len, target_len
-            )
-        else:
-            loss_aux_trans, loss_aux_symm_kl = 0.0, 0.0
+        ##DELETE: not using aux tasks
+        # if self.use_aux_task and aux_hs_pad is not None:
+        #     loss_aux_trans, loss_aux_symm_kl = self.auxiliary_task(
+        #         aux_hs_pad, pred_pad, z, target, pred_len, target_len
+        #     )
+        # else:
+        #     loss_aux_trans, loss_aux_symm_kl = 0.0, 0.0
 
-        if self.use_aux_ctc:
-            if "custom" in self.etype:
-                hs_mask = torch.IntTensor(
-                    [h.size(1) for h in hs_mask],
-                ).to(hs_mask.device)
+        # if self.use_aux_ctc:
+        #     if "custom" in self.etype:
+        #         hs_mask = torch.IntTensor(
+        #             [h.size(1) for h in hs_mask],
+        #         ).to(hs_mask.device)
 
-            loss_ctc = self.aux_ctc_weight * self.aux_ctc(hs_pad, hs_mask, ys_pad)
-        else:
-            loss_ctc = 0.0
+        #     loss_ctc = self.aux_ctc_weight * self.aux_ctc(hs_pad, hs_mask, ys_pad)
+        # else:
+        #     loss_ctc = 0.0
 
-        if self.use_aux_cross_entropy:
-            loss_lm = self.aux_cross_entropy_weight * self.aux_cross_entropy(
-                self.aux_decoder_output(pred_pad), ys_out_pad
-            )
-        else:
-            loss_lm = 0.0
+        # if self.use_aux_cross_entropy:
+        #     loss_lm = self.aux_cross_entropy_weight * self.aux_cross_entropy(
+        #         self.aux_decoder_output(pred_pad), ys_out_pad
+        #     )
+        # else:
+        #     loss_lm = 0.0
+
+        # loss = (
+        #     loss_trans
+        #     + self.transducer_weight * (loss_aux_trans + loss_aux_symm_kl)
+        #     + loss_ctc
+        #     + loss_lm
+        # )
 
         loss = (
-            loss_trans
-            + self.transducer_weight * (loss_aux_trans + loss_aux_symm_kl)
-            + loss_ctc
-            + loss_lm
+            ((1 - self.cond_weight) * loss_trans)
+            + ((self.cond_weight / 2) * zh_ctc_loss)
+            + ((self.cond_weight / 2) * en_ctc_loss)
         )
-
         self.loss = loss
         loss_data = float(loss)
 
@@ -471,12 +591,17 @@ class E2E(ASRInterface, torch.nn.Module):
             self.reporter.report(
                 loss_data,
                 float(loss_trans),
-                float(loss_ctc),
-                float(loss_lm),
-                float(loss_aux_trans),
-                float(loss_aux_symm_kl),
+                None, None, None, None,
+                # float(loss_ctc),
+                # float(loss_lm),
+                # float(loss_aux_trans),
+                # float(loss_aux_symm_kl),
                 cer,
                 wer,
+                float(zh_ctc_loss),
+                float(en_ctc_loss),
+                zh_cer_ctc,
+                en_cer_ctc
             )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
@@ -532,11 +657,23 @@ class E2E(ASRInterface, torch.nn.Module):
 
         """
         self.eval()
+        x = torch.as_tensor(x).unsqueeze(0)
+        zh_h, _ = self.zh_encoder(x, None)
+        en_h, _ = self.en_encoder(x, None)
+        h, _ = self.encoder(x, None)
 
-        if "custom" in self.etype:
-            h = self.encode_custom(x)
+        # if "custom" in self.etype:
+        #     h = self.encode_custom(x)
+        # else:
+        #     h = self.encode_rnn(x)
+
+        # Fusion of Cond encoders with rnnt encoder
+        if self.fusion_type == "add":
+            h = h + zh_h + en_h
         else:
-            h = self.encode_rnn(x)
+            import pdb;pdb.set_trace()
+
+        h = h.squeeze(0)
 
         nbest_hyps = beam_search(h)
 

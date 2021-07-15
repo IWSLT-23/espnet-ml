@@ -33,6 +33,7 @@ from espnet.asr.asr_utils import torch_snapshot
 from espnet.asr.pytorch_backend.asr_init import freeze_modules
 from espnet.asr.pytorch_backend.asr_init import load_trained_model
 from espnet.asr.pytorch_backend.asr_init import load_trained_modules
+from espnet.asr.pytorch_backend.asr_init import load_trained_modules_cs
 import espnet.lm.pytorch_backend.extlm as extlm_pytorch
 from espnet.nets.asr_interface import ASRInterface
 from espnet.nets.beam_search_transducer import BeamSearchTransducer
@@ -425,7 +426,9 @@ def train(args):
         mtl_mode = "mtl"
         logging.info("Multitask learning mode")
 
-    if (args.enc_init is not None or args.dec_init is not None) and args.num_encs == 1:
+    if (args.zh_init is not None or args.en_init is not None) and args.num_encs == 1:
+        model = load_trained_modules_cs(idim_list[0], odim, args)
+    elif (args.enc_init is not None or args.dec_init is not None) and args.num_encs == 1:
         model = load_trained_modules(idim_list[0], odim, args)
     else:
         model_class = dynamic_import(args.model_module)

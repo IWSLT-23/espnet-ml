@@ -510,6 +510,43 @@ def get_parser(parser=None, required=True):
     )
     parser.add_argument("--fbank-fmin", type=float, default=0.0, help="")
     parser.add_argument("--fbank-fmax", type=float, default=None, help="")
+    #CS inits
+    parser.add_argument(
+        "--zh-init",
+        default=None,
+        type=str,
+        help="Pre-trained ASR model to initialize encoder.",
+    )
+    parser.add_argument(
+        "--zh-init-mods",
+        default="enc.enc.",
+        type=lambda s: [str(mod) for mod in s.split(",") if s != ""],
+        help="List of encoder modules to initialize, separated by a comma.",
+    )
+    parser.add_argument(
+        "--en-init",
+        default=None,
+        type=str,
+        help="Pre-trained ASR, MT or LM model to initialize decoder.",
+    )
+    parser.add_argument(
+        "--en-init-mods",
+        default="att.,dec.",
+        type=lambda s: [str(mod) for mod in s.split(",") if s != ""],
+        help="List of decoder modules to initialize, separated by a comma.",
+    )
+    parser.add_argument(
+        "--cond-weight",
+        default=0.3,
+        type=float,
+        help="",
+    )
+    parser.add_argument(
+        "--fusion-type",
+        default="add",
+        type=str,
+        help="Pre-trained ASR, MT or LM model to initialize decoder.",
+    )
     return parser
 
 

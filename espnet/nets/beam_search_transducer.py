@@ -157,7 +157,7 @@ class BeamSearchTransducer:
                 hyp.dec_state = state
 
                 y, state, _ = self.decoder.score(hyp, cache)
-
+        
         return [hyp]
 
     def default_beam_search(self, h: torch.Tensor) -> List[Hypothesis]:
@@ -206,6 +206,9 @@ class BeamSearchTransducer:
                     lm_state = max_hyp.lm_state
 
                 for logp, k in zip(*top_k):
+                    # if k != self.blank and len(max_hyp.yseq) < h.shape[0]:
+                    #     score = max_hyp.score + float(logp) + ((len(max_hyp.yseq)) * .15)
+                    # else:
                     score = max_hyp.score + float(logp)
 
                     if self.use_lm:
@@ -228,7 +231,7 @@ class BeamSearchTransducer:
                 if len(kept_most_prob) >= beam:
                     kept_hyps = kept_most_prob
                     break
-
+        
         return self.sort_nbest(kept_hyps)
 
     def time_sync_decoding(self, h: torch.Tensor) -> List[Hypothesis]:

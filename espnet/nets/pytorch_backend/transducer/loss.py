@@ -21,7 +21,7 @@ class TransLoss(torch.nn.Module):
 
         if trans_type == "warp-transducer":
             from warprnnt_pytorch import RNNTLoss
-
+            
             self.trans_loss = RNNTLoss(blank=blank_id)
         elif trans_type == "warp-rnnt":
             if device.type == "cuda":
