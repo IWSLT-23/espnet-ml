@@ -208,12 +208,13 @@ class E2E(ASRInterface, torch.nn.Module):
 
     def get_total_subsampling_factor(self):
         """Get total subsampling factor."""
-        if self.etype == "custom":
-            return self.encoder.conv_subsampling_factor * int(
-                numpy.prod(self.subsample)
-            )
-        else:
-            return self.enc.conv_subsampling_factor * int(numpy.prod(self.subsample))
+        # if self.etype == "custom":
+        #     return self.encoder.conv_subsampling_factor * int(
+        #         numpy.prod(self.subsample)
+        #     )
+        # else:
+        #     return self.enc.conv_subsampling_factor * int(numpy.prod(self.subsample))
+        return self.zh_encoder.conv_subsampling_factor * int(numpy.prod(self.subsample))
 
     def __init__(self, idim, odim, args, ignore_id=-1, blank_id=0, training=True):
         """Construct an E2E object for transducer model."""
@@ -248,40 +249,42 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             aux_task_layer_list = []
 
-        if "custom" in args.etype:
-            if args.enc_block_arch is None:
-                raise ValueError(
-                    "When specifying custom encoder type, --enc-block-arch"
-                    "should also be specified in training config. See"
-                    "egs/vivos/asr1/conf/transducer/train_*.yaml for more info."
-                )
+        self.subsample = get_subsample(args, mode="asr", arch="transformer")
+        self.most_dom_list = args.enc_block_arch[:]
+        # if "custom" in args.etype:
+        #     if args.enc_block_arch is None:
+        #         raise ValueError(
+        #             "When specifying custom encoder type, --enc-block-arch"
+        #             "should also be specified in training config. See"
+        #             "egs/vivos/asr1/conf/transducer/train_*.yaml for more info."
+        #         )
 
-            self.subsample = get_subsample(args, mode="asr", arch="transformer")
+        #     self.subsample = get_subsample(args, mode="asr", arch="transformer")
 
-            self.encoder = CustomEncoder(
-                idim,
-                args.enc_block_arch,
-                input_layer=args.custom_enc_input_layer,
-                repeat_block=args.enc_block_repeat,
-                self_attn_type=args.custom_enc_self_attn_type,
-                positional_encoding_type=args.custom_enc_positional_encoding_type,
-                positionwise_activation_type=args.custom_enc_pw_activation_type,
-                conv_mod_activation_type=args.custom_enc_conv_mod_activation_type,
-                aux_task_layer_list=aux_task_layer_list,
-            )
-            encoder_out = self.encoder.enc_out
+        #     self.encoder = CustomEncoder(
+        #         idim,
+        #         args.enc_block_arch,
+        #         input_layer=args.custom_enc_input_layer,
+        #         repeat_block=args.enc_block_repeat,
+        #         self_attn_type=args.custom_enc_self_attn_type,
+        #         positional_encoding_type=args.custom_enc_positional_encoding_type,
+        #         positionwise_activation_type=args.custom_enc_pw_activation_type,
+        #         conv_mod_activation_type=args.custom_enc_conv_mod_activation_type,
+        #         aux_task_layer_list=aux_task_layer_list,
+        #     )
+        #     encoder_out = self.encoder.enc_out
 
-            self.most_dom_list = args.enc_block_arch[:]
-        else:
-            self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
+        #     self.most_dom_list = args.enc_block_arch[:]
+        # else:
+        #     self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
 
-            self.enc = encoder_for(
-                args,
-                idim,
-                self.subsample,
-                aux_task_layer_list=aux_task_layer_list,
-            )
-            encoder_out = args.eprojs
+        #     self.enc = encoder_for(
+        #         args,
+        #         idim,
+        #         self.subsample,
+        #         aux_task_layer_list=aux_task_layer_list,
+        #     )
+        #     encoder_out = args.eprojs
 
         if "custom" in args.dtype:
             if args.dec_block_arch is None:
@@ -319,7 +322,7 @@ class E2E(ASRInterface, torch.nn.Module):
             decoder_out = args.dunits
 
         self.joint_network = JointNetwork(
-            odim, encoder_out, decoder_out, args.joint_dim, args.joint_activation_type
+            odim, args.adim, decoder_out, args.joint_dim, args.joint_activation_type
         )
 
         if hasattr(self, "most_dom_list"):
@@ -662,6 +665,7 @@ class E2E(ASRInterface, torch.nn.Module):
         zh_h, _ = self.zh_encoder(x, None)
         en_h, _ = self.en_encoder(x, None)
         # h, _ = self.encoder(x, None)
+
         # # tmp code to try to view ctc outputs
         # from itertools import groupby
         # lpz = self.en_ctc.argmax(en_h)
