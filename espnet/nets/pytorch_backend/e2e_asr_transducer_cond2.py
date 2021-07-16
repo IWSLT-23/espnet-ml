@@ -256,22 +256,22 @@ class E2E(ASRInterface, torch.nn.Module):
                     "egs/vivos/asr1/conf/transducer/train_*.yaml for more info."
                 )
 
-            # self.subsample = get_subsample(args, mode="asr", arch="transformer")
+            self.subsample = get_subsample(args, mode="asr", arch="transformer")
 
-            # self.encoder = CustomEncoder(
-            #     idim,
-            #     args.enc_block_arch,
-            #     input_layer=args.custom_enc_input_layer,
-            #     repeat_block=args.enc_block_repeat,
-            #     self_attn_type=args.custom_enc_self_attn_type,
-            #     positional_encoding_type=args.custom_enc_positional_encoding_type,
-            #     positionwise_activation_type=args.custom_enc_pw_activation_type,
-            #     conv_mod_activation_type=args.custom_enc_conv_mod_activation_type,
-            #     aux_task_layer_list=aux_task_layer_list,
-            # )
-            # encoder_out = self.encoder.enc_out
+            self.encoder = CustomEncoder(
+                idim,
+                args.enc_block_arch,
+                input_layer=args.custom_enc_input_layer,
+                repeat_block=args.enc_block_repeat,
+                self_attn_type=args.custom_enc_self_attn_type,
+                positional_encoding_type=args.custom_enc_positional_encoding_type,
+                positionwise_activation_type=args.custom_enc_pw_activation_type,
+                conv_mod_activation_type=args.custom_enc_conv_mod_activation_type,
+                aux_task_layer_list=aux_task_layer_list,
+            )
+            encoder_out = self.encoder.enc_out
 
-            # self.most_dom_list = args.enc_block_arch[:]
+            self.most_dom_list = args.enc_block_arch[:]
         else:
             self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
 
@@ -319,7 +319,7 @@ class E2E(ASRInterface, torch.nn.Module):
             decoder_out = args.dunits
 
         self.joint_network = JointNetwork(
-            odim, args.adim, decoder_out, args.joint_dim, args.joint_activation_type
+            odim, encoder_out, decoder_out, args.joint_dim, args.joint_activation_type
         )
 
         if hasattr(self, "most_dom_list"):
