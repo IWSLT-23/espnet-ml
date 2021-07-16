@@ -716,6 +716,8 @@ class E2E(ASRInterface, torch.nn.Module):
                 if isinstance(m, MultiHeadedAttention) or isinstance(
                     m, RelPositionMultiHeadedAttention
                 ):
+                    if m.attn is None:
+                        continue
                     ret[name] = m.attn.cpu().numpy()
 
         self.train()
