@@ -319,7 +319,7 @@ class E2E(ASRInterface, torch.nn.Module):
             decoder_out = args.dunits
 
         self.joint_network = JointNetwork(
-            odim, encoder_out, decoder_out, args.joint_dim, args.joint_activation_type
+            odim, args.adim, decoder_out, args.joint_dim, args.joint_activation_type
         )
 
         if hasattr(self, "most_dom_list"):
