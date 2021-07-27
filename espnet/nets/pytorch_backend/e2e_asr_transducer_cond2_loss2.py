@@ -208,12 +208,13 @@ class E2E(ASRInterface, torch.nn.Module):
 
     def get_total_subsampling_factor(self):
         """Get total subsampling factor."""
-        if self.etype == "custom":
-            return self.encoder.conv_subsampling_factor * int(
-                numpy.prod(self.subsample)
-            )
-        else:
-            return self.enc.conv_subsampling_factor * int(numpy.prod(self.subsample))
+        # if self.etype == "custom":
+        #     return self.encoder.conv_subsampling_factor * int(
+        #         numpy.prod(self.subsample)
+        #     )
+        # else:
+        #     return self.enc.conv_subsampling_factor * int(numpy.prod(self.subsample))
+        return self.zh_encoder.conv_subsampling_factor * int(numpy.prod(self.subsample))
 
     def __init__(self, idim, odim, args, ignore_id=-1, blank_id=0, training=True):
         """Construct an E2E object for transducer model."""
@@ -248,40 +249,42 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             aux_task_layer_list = []
 
-        if "custom" in args.etype:
-            if args.enc_block_arch is None:
-                raise ValueError(
-                    "When specifying custom encoder type, --enc-block-arch"
-                    "should also be specified in training config. See"
-                    "egs/vivos/asr1/conf/transducer/train_*.yaml for more info."
-                )
+        self.subsample = get_subsample(args, mode="asr", arch="transformer")
+        self.most_dom_list = args.enc_block_arch[:]
+        # if "custom" in args.etype:
+        #     if args.enc_block_arch is None:
+        #         raise ValueError(
+        #             "When specifying custom encoder type, --enc-block-arch"
+        #             "should also be specified in training config. See"
+        #             "egs/vivos/asr1/conf/transducer/train_*.yaml for more info."
+        #         )
 
-            self.subsample = get_subsample(args, mode="asr", arch="transformer")
+        #     self.subsample = get_subsample(args, mode="asr", arch="transformer")
 
-            self.encoder = CustomEncoder(
-                idim,
-                args.enc_block_arch,
-                input_layer=args.custom_enc_input_layer,
-                repeat_block=args.enc_block_repeat,
-                self_attn_type=args.custom_enc_self_attn_type,
-                positional_encoding_type=args.custom_enc_positional_encoding_type,
-                positionwise_activation_type=args.custom_enc_pw_activation_type,
-                conv_mod_activation_type=args.custom_enc_conv_mod_activation_type,
-                aux_task_layer_list=aux_task_layer_list,
-            )
-            encoder_out = self.encoder.enc_out
+        #     self.encoder = CustomEncoder(
+        #         idim,
+        #         args.enc_block_arch,
+        #         input_layer=args.custom_enc_input_layer,
+        #         repeat_block=args.enc_block_repeat,
+        #         self_attn_type=args.custom_enc_self_attn_type,
+        #         positional_encoding_type=args.custom_enc_positional_encoding_type,
+        #         positionwise_activation_type=args.custom_enc_pw_activation_type,
+        #         conv_mod_activation_type=args.custom_enc_conv_mod_activation_type,
+        #         aux_task_layer_list=aux_task_layer_list,
+        #     )
+        #     encoder_out = self.encoder.enc_out
 
-            self.most_dom_list = args.enc_block_arch[:]
-        else:
-            self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
+        #     self.most_dom_list = args.enc_block_arch[:]
+        # else:
+        #     self.subsample = get_subsample(args, mode="asr", arch="rnn-t")
 
-            self.enc = encoder_for(
-                args,
-                idim,
-                self.subsample,
-                aux_task_layer_list=aux_task_layer_list,
-            )
-            encoder_out = args.eprojs
+        #     self.enc = encoder_for(
+        #         args,
+        #         idim,
+        #         self.subsample,
+        #         aux_task_layer_list=aux_task_layer_list,
+        #     )
+        #     encoder_out = args.eprojs
 
         if "custom" in args.dtype:
             if args.dec_block_arch is None:
@@ -319,7 +322,7 @@ class E2E(ASRInterface, torch.nn.Module):
             decoder_out = args.dunits
 
         self.joint_network = JointNetwork(
-            odim, encoder_out, decoder_out, args.joint_dim, args.joint_activation_type
+            odim, args.adim, decoder_out, args.joint_dim, args.joint_activation_type
         )
 
         if hasattr(self, "most_dom_list"):
@@ -409,9 +412,15 @@ class E2E(ASRInterface, torch.nn.Module):
         # Cond
         self.cond_weight = args.cond_weight
         self.fusion_type = args.fusion_type
+        if hasattr(args, 'gt_mask_type'):
+            self.gt_mask_type = args.gt_mask_type
+        else:
+            self.gt_mask_type = "ignore"
         # zh encoder
         if args.transformer_attn_dropout_rate is None:
             args.transformer_attn_dropout_rate = args.dropout_rate
+
+        logging.warning("attn dropout:" + str(args.transformer_attn_dropout_rate))
         self.cond_adim = args.adim
         self.zh_encoder = Encoder(
             idim=idim,
@@ -485,15 +494,25 @@ class E2E(ASRInterface, torch.nn.Module):
         zh_hs_pad, hs_mask = self.zh_encoder(xs_pad, src_mask)    #hs_masks are all the same
         en_hs_pad, _ = self.en_encoder(xs_pad, src_mask)
         # make zh and en gts
-        # zh is all from 5000 onwards
-        zh_ys_pad = ys_pad.masked_fill(~(ys_pad >= 5000), -1)
-        # en is < 5000 and including lid tags
-        en_ys_pad = ys_pad.masked_fill(~((ys_pad < 5000) | (ys_pad >= 11237)), -1)
+        if self.gt_mask_type == "lid":
+            # zh is all from 5000 onwards
+            zh_ys_pad = ys_pad.masked_fill(~(ys_pad >= 5000), 11238)
+            # en is < 5000 and including lid tags
+            en_ys_pad = ys_pad.masked_fill(~((ys_pad < 5000) | (ys_pad >= 11237)), 11237)
+        else:
+            # zh is all from 5000 onwards
+            zh_ys_pad = ys_pad.masked_fill(~(ys_pad >= 5000), -1)
+            # en is < 5000 and including lid tags
+            en_ys_pad = ys_pad.masked_fill(~((ys_pad < 5000) | (ys_pad >= 11237)), -1)
         # ctc losses
         batch_size = xs_pad.size(0)
         hs_len = hs_mask.view(batch_size, -1).sum(1)
-        zh_ctc_loss = self.zh_ctc(zh_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, zh_ys_pad)
-        en_ctc_loss = self.en_ctc(en_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, en_ys_pad)
+        if self.fusion_type == "confidence":
+            zh_ctc_loss, zh_posteriors = self.zh_ctc(zh_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, zh_ys_pad, get_posteriors=True)
+            en_ctc_loss, en_posteriors = self.en_ctc(en_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, en_ys_pad, get_posteriors=True)
+        else:
+            zh_ctc_loss = self.zh_ctc(zh_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, zh_ys_pad)
+            en_ctc_loss = self.en_ctc(en_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, en_ys_pad)
         # logging
         if not self.training and self.error_calculator_ctc is not None:
             zh_ys_hat = self.zh_ctc.argmax(zh_hs_pad.view(batch_size, -1, self.cond_adim)).data
@@ -505,18 +524,18 @@ class E2E(ASRInterface, torch.nn.Module):
             zh_cer_ctc = None
             en_cer_ctc = None
 
-        # 1. encoder
-        if "custom" in self.etype:
-            # src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)  #this is duplicated
+        # # 1. encoder
+        # if "custom" in self.etype:
+        #     # src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)  #this is duplicated
 
-            _hs_pad, _ = self.encoder(xs_pad, src_mask)     #hs_masks are all the same
-        else:
-            _hs_pad, hs_mask, _ = self.enc(xs_pad, ilens)
+        #     _hs_pad, _ = self.encoder(xs_pad, src_mask)     #hs_masks are all the same
+        # else:
+        #     _hs_pad, hs_mask, _ = self.enc(xs_pad, ilens)
 
-        if self.use_aux_task:
-            hs_pad, aux_hs_pad = _hs_pad[0], _hs_pad[1]
-        else:
-            hs_pad, aux_hs_pad = _hs_pad, None
+        # if self.use_aux_task:
+        #     hs_pad, aux_hs_pad = _hs_pad[0], _hs_pad[1]
+        # else:
+        #     hs_pad, aux_hs_pad = _hs_pad, None
 
         # 1.5. transducer preparation related
         ys_in_pad, ys_out_pad, target, pred_len, target_len = prepare_loss_inputs(
@@ -525,7 +544,16 @@ class E2E(ASRInterface, torch.nn.Module):
 
         # Fusion of Cond encoders with rnnt encoder
         if self.fusion_type == "add":
-            hs_pad = hs_pad + zh_hs_pad + en_hs_pad
+            # hs_pad = hs_pad + zh_hs_pad + en_hs_pad
+            hs_pad = zh_hs_pad + en_hs_pad
+        elif self.fusion_type == "confidence":
+            # zh_ys_hat is B x T x V --> confidence is B x T x 1
+            # zh_hs_pad is B x T x D
+            zh_confidence = zh_posteriors[:,:,-3]
+            zh_hs_pad = zh_hs_pad * zh_confidence.unsqueeze(-1)
+            en_confidence = en_posteriors[:,:,-2]
+            en_hs_pad = en_hs_pad * en_confidence.unsqueeze(-1)
+            hs_pad = zh_hs_pad + en_hs_pad
         else:
             import pdb;pdb.set_trace()
 
@@ -575,8 +603,7 @@ class E2E(ASRInterface, torch.nn.Module):
 
         loss = (
             ((1 - self.cond_weight) * loss_trans)
-            + ((self.cond_weight / 2) * zh_ctc_loss)
-            + ((self.cond_weight / 2) * en_ctc_loss)
+            + (self.cond_weight * (zh_ctc_loss + en_ctc_loss))
         )
         self.loss = loss
         loss_data = float(loss)
@@ -601,7 +628,7 @@ class E2E(ASRInterface, torch.nn.Module):
                 float(zh_ctc_loss),
                 float(en_ctc_loss),
                 zh_cer_ctc,
-                en_cer_ctc
+                en_cer_ctc,
             )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
@@ -660,15 +687,12 @@ class E2E(ASRInterface, torch.nn.Module):
         x = torch.as_tensor(x).unsqueeze(0)
         zh_h, _ = self.zh_encoder(x, None)
         en_h, _ = self.en_encoder(x, None)
-        h, _ = self.encoder(x, None)    
-        
-        # # tmp remove rnnt encoder during inference
-        # # h = zh_h + en_h
+        # h, _ = self.encoder(x, None)
 
-        # # tmp code to try to view ctc outputs
+        # # # tmp code to try to view ctc outputs
         # from itertools import groupby
-        # # lpz = self.en_ctc.argmax(en_h)
         # lpz = self.zh_ctc.argmax(zh_h)
+        # # lpz = self.en_ctc.argmax(en_h)
         # collapsed_indices = [x[0] for x in groupby(lpz[0])]
         # hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
         # nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
@@ -679,9 +703,10 @@ class E2E(ASRInterface, torch.nn.Module):
         # else:
         #     h = self.encode_rnn(x)
 
-        # # Fusion of Cond encoders with rnnt encoder
+        # Fusion of Cond encoders with rnnt encoder
         if self.fusion_type == "add":
-            h = h + zh_h + en_h
+            # h = h + zh_h + en_h
+            h = zh_h + en_h
         else:
             import pdb;pdb.set_trace()
 
@@ -719,6 +744,8 @@ class E2E(ASRInterface, torch.nn.Module):
                 if isinstance(m, MultiHeadedAttention) or isinstance(
                     m, RelPositionMultiHeadedAttention
                 ):
+                    if m.attn is None:
+                        continue
                     ret[name] = m.attn.cpu().numpy()
 
         self.train()

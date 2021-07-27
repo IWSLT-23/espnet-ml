@@ -57,6 +57,18 @@ class Reporter(chainer.Chain):
         logging.info("mtl loss:" + str(mtl_loss))
         reporter.report({"loss": mtl_loss}, self)
 
+class ReporterCTCMulti(chainer.Chain):
+    """A chainer reporter wrapper."""
+
+    def report(self, zh_loss_ctc, en_loss_ctc, zh_cer_ctc, en_cer_ctc, loss_ctc):
+        """Report at every step."""
+        reporter.report({"zh_ctc_loss": zh_loss_ctc}, self)
+        reporter.report({"en_ctc_loss": en_loss_ctc}, self)
+        reporter.report({"zh_cer": zh_cer_ctc}, self)
+        reporter.report({"en_cer": en_cer_ctc}, self)
+        reporter.report({"loss_ctc": loss_ctc}, self)
+        reporter.report({"loss": loss_ctc}, self)
+
 
 class E2E(ASRInterface, torch.nn.Module):
     """E2E module.

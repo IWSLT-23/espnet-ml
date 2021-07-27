@@ -79,7 +79,7 @@ class CTC(torch.nn.Module):
         else:
             raise NotImplementedError
 
-    def forward(self, hs_pad, hlens, ys_pad):
+    def forward(self, hs_pad, hlens, ys_pad, get_posteriors=False):
         """CTC forward
 
         :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
@@ -146,6 +146,10 @@ class CTC(torch.nn.Module):
             self.loss = self.loss.sum()
             logging.info("ctc loss:" + str(float(self.loss)))
 
+        if get_posteriors:
+            ys_hat = ys_hat.transpose(0, 1)
+            posterior = F.softmax(ys_hat, dim=2)
+            return self.loss, posterior
         return self.loss
 
     def softmax(self, hs_pad):

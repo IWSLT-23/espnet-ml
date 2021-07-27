@@ -268,7 +268,13 @@ class CustomConverter(object):
         """
         # batch should be located in list
         assert len(batch) == 1
-        xs, ys = batch[0]
+
+        # check if using category
+        if len(batch[0]) == 3:
+            xs, ys, cats = batch[0]
+        else:
+            xs, ys = batch[0]
+            cats = None
 
         # perform subsampling
         if self.subsampling_factor > 1:
@@ -308,7 +314,10 @@ class CustomConverter(object):
             self.ignore_id,
         ).to(device)
 
-        return xs_pad, ilens, ys_pad
+        if cats is None:
+            return xs_pad, ilens, ys_pad
+        else:
+            return xs_pad, ilens, ys_pad, cats
 
 
 class CustomConverterMulEnc(object):
@@ -710,7 +719,9 @@ def train(args):
         att_reporter = None
 
     # Save CTC prob at each epoch
-    if mtl_mode in ["ctc", "mtl"] and args.num_save_ctc > 0:
+    if "e2e_asr_ctc_multilingual" in args.model_module:
+        ctc_reporter = None
+    elif mtl_mode in ["ctc", "mtl"] and args.num_save_ctc > 0:
         # NOTE: sort it by output lengths
         data = sorted(
             list(valid_json.items())[: args.num_save_ctc],

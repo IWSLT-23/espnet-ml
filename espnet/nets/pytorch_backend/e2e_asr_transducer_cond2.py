@@ -419,6 +419,8 @@ class E2E(ASRInterface, torch.nn.Module):
         # zh encoder
         if args.transformer_attn_dropout_rate is None:
             args.transformer_attn_dropout_rate = args.dropout_rate
+
+        logging.warning("attn dropout:" + str(args.transformer_attn_dropout_rate))
         self.cond_adim = args.adim
         self.zh_encoder = Encoder(
             idim=idim,
@@ -505,8 +507,12 @@ class E2E(ASRInterface, torch.nn.Module):
         # ctc losses
         batch_size = xs_pad.size(0)
         hs_len = hs_mask.view(batch_size, -1).sum(1)
-        zh_ctc_loss = self.zh_ctc(zh_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, zh_ys_pad)
-        en_ctc_loss = self.en_ctc(en_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, en_ys_pad)
+        if self.fusion_type == "confidence":
+            zh_ctc_loss, zh_posteriors = self.zh_ctc(zh_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, zh_ys_pad, get_posteriors=True)
+            en_ctc_loss, en_posteriors = self.en_ctc(en_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, en_ys_pad, get_posteriors=True)
+        else:
+            zh_ctc_loss = self.zh_ctc(zh_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, zh_ys_pad)
+            en_ctc_loss = self.en_ctc(en_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, en_ys_pad)
         # logging
         if not self.training and self.error_calculator_ctc is not None:
             zh_ys_hat = self.zh_ctc.argmax(zh_hs_pad.view(batch_size, -1, self.cond_adim)).data
@@ -539,6 +545,14 @@ class E2E(ASRInterface, torch.nn.Module):
         # Fusion of Cond encoders with rnnt encoder
         if self.fusion_type == "add":
             # hs_pad = hs_pad + zh_hs_pad + en_hs_pad
+            hs_pad = zh_hs_pad + en_hs_pad
+        elif self.fusion_type == "confidence":
+            # zh_ys_hat is B x T x V --> confidence is B x T x 1
+            # zh_hs_pad is B x T x D
+            zh_confidence = zh_posteriors[:,:,-3]
+            zh_hs_pad = zh_hs_pad * zh_confidence.unsqueeze(-1)
+            en_confidence = en_posteriors[:,:,-2]
+            en_hs_pad = en_hs_pad * en_confidence.unsqueeze(-1)
             hs_pad = zh_hs_pad + en_hs_pad
         else:
             import pdb;pdb.set_trace()
@@ -615,7 +629,7 @@ class E2E(ASRInterface, torch.nn.Module):
                 float(zh_ctc_loss),
                 float(en_ctc_loss),
                 zh_cer_ctc,
-                en_cer_ctc
+                en_cer_ctc,
             )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
@@ -676,9 +690,10 @@ class E2E(ASRInterface, torch.nn.Module):
         en_h, _ = self.en_encoder(x, None)
         # h, _ = self.encoder(x, None)
 
-        # # tmp code to try to view ctc outputs
+        # # # tmp code to try to view ctc outputs
         # from itertools import groupby
-        # lpz = self.en_ctc.argmax(en_h)
+        # lpz = self.zh_ctc.argmax(zh_h)
+        # # lpz = self.en_ctc.argmax(en_h)
         # collapsed_indices = [x[0] for x in groupby(lpz[0])]
         # hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
         # nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]

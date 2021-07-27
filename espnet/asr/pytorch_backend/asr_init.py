@@ -326,10 +326,16 @@ def load_trained_modules_cs(idim, odim, args, interface=ASRInterface):
                 # rename with lang prefix
                 renamed_partial_state_dict = OrderedDict()
                 for k in partial_state_dict.keys():
-                    renamed_partial_state_dict[lang+"_"+k] = partial_state_dict[k]
+                    if "en_ctc" in k or "zh_ctc" in k:
+                        renamed_partial_state_dict[k] = partial_state_dict[k]
+                    else:
+                        renamed_partial_state_dict[lang+"_"+k] = partial_state_dict[k]
                 renamed_modules = []
                 for m in modules:
-                    renamed_modules.append(lang+"_"+m)
+                    if "en_ctc" in m or "zh_ctc" in m:
+                        renamed_modules.append(m)
+                    else:
+                        renamed_modules.append(lang+"_"+m)
                 partial_state_dict = renamed_partial_state_dict
                 modules = renamed_modules
 
