@@ -411,11 +411,6 @@ class E2E(ASRInterface, torch.nn.Module):
             odim, args.adim, args.cond_dropout_rate, ctc_type=args.ctc_type, reduce=True
         )
 
-        # gates
-        self.w_zh = torch.nn.Linear(args.adim, args.adim)
-        self.w_en = torch.nn.Linear(args.adim, args.adim)
-        self.w_alpha = torch.nn.Linear(args.adim, 1)
-
     def default_parameters(self, args):
         """Initialize/reset parameters for transducer.
 
@@ -452,9 +447,7 @@ class E2E(ASRInterface, torch.nn.Module):
             zh_hs_pad, hs_mask = self.zh_encoder(xs_pad, src_mask)    #hs_masks are all the same
             en_hs_pad, _ = self.en_encoder(xs_pad, src_mask)
 
-            # gated fusion
-            alpha = torch.sigmoid(self.w_alpha(torch.tanh(self.w_zh(zh_hs_pad) + self.w_en(en_hs_pad))))
-            hs_pad = (alpha * zh_hs_pad) + ((1 - alpha) * en_hs_pad)
+            hs_pad = zh_hs_pad + en_hs_pad
 
             # ctc losses
             batch_size = xs_pad.size(0)
@@ -602,9 +595,7 @@ class E2E(ASRInterface, torch.nn.Module):
         zh_h, _ = self.zh_encoder(x, None)
         en_h, _ = self.en_encoder(x, None)
 
-        # gated fusion
-        alpha = torch.sigmoid(self.w_alpha(torch.tanh(self.w_zh(zh_h) + self.w_en(en_h))))
-        h = (alpha * zh_h) + ((1 - alpha) * en_h)
+        h = zh_h + en_h
 
         h = h.squeeze(0)
 
