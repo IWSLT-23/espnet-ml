@@ -553,6 +553,12 @@ def get_parser(parser=None, required=True):
         type=str,
         help="Pre-trained ASR, MT or LM model to initialize decoder.",
     )
+    parser.add_argument(
+        "--lang-elayers",
+        default=2,
+        type=int,
+        help="Pre-trained ASR, MT or LM model to initialize decoder.",
+    )
     return parser
 
 

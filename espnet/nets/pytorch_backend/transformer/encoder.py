@@ -111,6 +111,8 @@ class Encoder(torch.nn.Module):
                 torch.nn.ReLU(),
                 pos_enc_class(attention_dim, positional_dropout_rate),
             )
+        elif input_layer == "nothing":
+            self.embed = None
         elif input_layer == "conv2d":
             self.embed = Conv2dSubsampling(idim, attention_dim, dropout_rate)
             self.conv_subsampling_factor = 4
@@ -296,6 +298,8 @@ class Encoder(torch.nn.Module):
             (Conv2dSubsampling, Conv2dSubsampling6, Conv2dSubsampling8, VGG2L),
         ):
             xs, masks = self.embed(xs, masks)
+        elif self.embed is None:
+            xs = xs
         else:
             xs = self.embed(xs)
         xs, masks = self.encoders(xs, masks)
