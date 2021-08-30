@@ -58,6 +58,7 @@ from espnet.nets.pytorch_backend.transformer.argument import (
 )
 
 from espnet.nets.pytorch_backend.conformer.encoder import Encoder
+from espnet.nets.pytorch_backend.transformer.encoder import Encoder as Encoder_T
 from espnet.nets.pytorch_backend.ctc import CTC
 
 class Reporter(chainer.Chain):
@@ -73,7 +74,10 @@ class Reporter(chainer.Chain):
         loss_aux_symm_kl,
         cer,
         wer,
-        ctc_cer,
+        zh_ctc_loss,
+        en_ctc_loss,
+        zh_cer,
+        en_cer
     ):
         """Instantiate reporter attributes."""
         chainer.reporter.report({"loss": loss}, self)
@@ -84,7 +88,10 @@ class Reporter(chainer.Chain):
         chainer.reporter.report({"loss_aux_symm_kl": loss_aux_symm_kl}, self)
         chainer.reporter.report({"cer": cer}, self)
         chainer.reporter.report({"wer": wer}, self)
-        chainer.reporter.report({"ctc_cer": ctc_cer}, self)
+        chainer.reporter.report({"zh_ctc_loss": zh_ctc_loss}, self)
+        chainer.reporter.report({"en_ctc_loss": en_ctc_loss}, self)
+        chainer.reporter.report({"zh_cer": zh_cer}, self)
+        chainer.reporter.report({"en_cer": en_cer}, self)
 
         logging.info("loss:" + str(loss))
 
@@ -202,6 +209,12 @@ class E2E(ASRInterface, torch.nn.Module):
 
     def get_total_subsampling_factor(self):
         """Get total subsampling factor."""
+        # if self.etype == "custom":
+        #     return self.encoder.conv_subsampling_factor * int(
+        #         numpy.prod(self.subsample)
+        #     )
+        # else:
+        #     return self.enc.conv_subsampling_factor * int(numpy.prod(self.subsample))
         return self.zh_encoder.conv_subsampling_factor * int(numpy.prod(self.subsample))
 
     def __init__(self, idim, odim, args, ignore_id=-1, blank_id=0, training=True):
@@ -366,11 +379,18 @@ class E2E(ASRInterface, torch.nn.Module):
         # Cond
         self.cond_weight = args.cond_weight
         self.fusion_type = args.fusion_type
+        if hasattr(args, 'gt_mask_type'):
+            self.gt_mask_type = args.gt_mask_type
+        else:
+            self.gt_mask_type = "ignore"
         # zh encoder
         if args.transformer_attn_dropout_rate is None:
             args.transformer_attn_dropout_rate = args.dropout_rate
+
+        logging.warning("attn dropout:" + str(args.transformer_attn_dropout_rate))
         self.cond_adim = args.adim
-        self.zh_encoder = Encoder(
+
+        self.encoder = Encoder(
             idim=idim,
             attention_dim=args.adim,
             attention_heads=args.aheads,
@@ -388,27 +408,50 @@ class E2E(ASRInterface, torch.nn.Module):
             zero_triu=args.zero_triu,
             cnn_module_kernel=args.cnn_module_kernel,
         )
-        self.en_encoder = Encoder(
-            idim=idim,
+
+        self.zh_encoder = Encoder_T(
+            idim=odim,
             attention_dim=args.adim,
             attention_heads=args.aheads,
             linear_units=args.cond_eunits,
-            num_blocks=args.cond_elayers,
-            input_layer=args.transformer_input_layer,
+            num_blocks=(args.cond_elayers // 6),
+            input_layer="nothing",
             dropout_rate=args.cond_dropout_rate,
             positional_dropout_rate=args.cond_dropout_rate,
             attention_dropout_rate=args.transformer_attn_dropout_rate,
-            pos_enc_layer_type=args.transformer_encoder_pos_enc_layer_type,
-            selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-            activation_type=args.transformer_encoder_activation_type,
-            macaron_style=args.macaron_style,
-            use_cnn_module=args.use_cnn_module,
-            zero_triu=args.zero_triu,
-            cnn_module_kernel=args.cnn_module_kernel,
+            padding_idx=0,
         )
-        # single CTC loss, post fusion
-        self.ctc = CTC(
+        self.zh_ctc = CTC(
             odim, args.adim, args.cond_dropout_rate, ctc_type=args.ctc_type, reduce=True
+        )
+        # en encoder
+        self.en_encoder = Encoder_T(
+            idim=odim,
+            attention_dim=args.adim,
+            attention_heads=args.aheads,
+            linear_units=args.cond_eunits,
+            num_blocks=(args.cond_elayers // 6),
+            input_layer="nothing",
+            dropout_rate=args.cond_dropout_rate,
+            positional_dropout_rate=args.cond_dropout_rate,
+            attention_dropout_rate=args.transformer_attn_dropout_rate,
+            padding_idx=0,
+        )
+        self.en_ctc = CTC(
+            odim, args.adim, args.cond_dropout_rate, ctc_type=args.ctc_type, reduce=True
+        )
+
+        self.cond_chain = Encoder_T(
+            idim=odim,
+            attention_dim=args.adim,
+            attention_heads=args.aheads,
+            linear_units=args.cond_eunits,
+            num_blocks=(args.cond_elayers // 6),
+            input_layer="linear",
+            dropout_rate=args.cond_dropout_rate,
+            positional_dropout_rate=args.cond_dropout_rate,
+            attention_dropout_rate=args.transformer_attn_dropout_rate,
+            padding_idx=0,
         )
 
     def default_parameters(self, args):
@@ -436,26 +479,49 @@ class E2E(ASRInterface, torch.nn.Module):
         # Cond encoders
         xs_pad = xs_pad[:, : max(ilens)]
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
-        zh_hs_pad, hs_mask = self.zh_encoder(xs_pad, src_mask)    #hs_masks are all the same
-        en_hs_pad, _ = self.en_encoder(xs_pad, src_mask)
+        # shared layers
+        hs_pad, hs_mask = self.encoder(xs_pad, src_mask)
 
-        hs_pad = zh_hs_pad + en_hs_pad
-
+        # lang specific layers
+        zh_hs_pad, _ = self.zh_encoder(hs_pad, hs_mask)
+        en_hs_pad, _ = self.en_encoder(hs_pad, hs_mask)
+        # make zh and en gts
+        if self.gt_mask_type == "lid":
+            # zh is all from 5000 onwards
+            zh_ys_pad = ys_pad.masked_fill(~(ys_pad >= 5000), 11238)
+            # en is < 5000 and including lid tags
+            en_ys_pad = ys_pad.masked_fill(~((ys_pad < 5000) | (ys_pad >= 11237)), 11237)
+        else:
+            # zh is all from 5000 onwards
+            zh_ys_pad = ys_pad.masked_fill(~(ys_pad >= 5000), -1)
+            # en is < 5000 and including lid tags
+            en_ys_pad = ys_pad.masked_fill(~((ys_pad < 5000) | (ys_pad >= 11237)), -1)
         # ctc losses
         batch_size = xs_pad.size(0)
         hs_len = hs_mask.view(batch_size, -1).sum(1)
-        ctc_loss = self.ctc(hs_pad.view(batch_size, -1, self.cond_adim), hs_len, ys_pad)
+
+        zh_ctc_loss, zh_posteriors = self.zh_ctc(zh_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, zh_ys_pad, get_posteriors=True)
+        en_ctc_loss, en_posteriors = self.en_ctc(en_hs_pad.view(batch_size, -1, self.cond_adim), hs_len, en_ys_pad, get_posteriors=True)
+
         # logging
         if not self.training and self.error_calculator_ctc is not None:
-            ys_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.cond_adim)).data
-            cer_ctc = self.error_calculator_ctc(ys_hat.cpu(), ys_pad.cpu(), is_ctc=True)
+            zh_ys_hat = self.zh_ctc.argmax(zh_hs_pad.view(batch_size, -1, self.cond_adim)).data
+            zh_cer_ctc = self.error_calculator_ctc(zh_ys_hat.cpu(), zh_ys_pad.cpu(), is_ctc=True)
+
+            en_ys_hat = self.en_ctc.argmax(en_hs_pad.view(batch_size, -1, self.cond_adim)).data
+            en_cer_ctc = self.error_calculator_ctc(en_ys_hat.cpu(), en_ys_pad.cpu(), is_ctc=True)
         else:
-            cer_ctc = None
+            zh_cer_ctc = None
+            en_cer_ctc = None
 
         # 1.5. transducer preparation related
         ys_in_pad, ys_out_pad, target, pred_len, target_len = prepare_loss_inputs(
             ys_pad, hs_mask
         )
+
+        hs_pad = zh_posteriors + en_posteriors
+        
+        hs_pad, _ = self.cond_chain(hs_pad, hs_mask)
 
         # 2. decoder
         if "custom" in self.dtype:
@@ -471,7 +537,8 @@ class E2E(ASRInterface, torch.nn.Module):
 
         loss = (
             ((1 - self.cond_weight) * loss_trans)
-            + (self.cond_weight * ctc_loss)
+            + ((self.cond_weight / 2) * zh_ctc_loss)
+            + ((self.cond_weight / 2) * en_ctc_loss)
         )
         self.loss = loss
         loss_data = float(loss)
@@ -486,13 +553,17 @@ class E2E(ASRInterface, torch.nn.Module):
             self.reporter.report(
                 loss_data,
                 float(loss_trans),
-                float(ctc_loss),
-                None,
-                None, 
-                None,
+                None, None, None, None,
+                # float(loss_ctc),
+                # float(loss_lm),
+                # float(loss_aux_trans),
+                # float(loss_aux_symm_kl),
                 cer,
                 wer,
-                cer_ctc,
+                float(zh_ctc_loss),
+                float(en_ctc_loss),
+                zh_cer_ctc,
+                en_cer_ctc,
             )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
@@ -549,22 +620,26 @@ class E2E(ASRInterface, torch.nn.Module):
         """
         self.eval()
         x = torch.as_tensor(x).unsqueeze(0)
-        zh_h, _ = self.zh_encoder(x, None)
-        en_h, _ = self.en_encoder(x, None)
+        h, _ = self.encoder(x, None)
+        zh_h, _ = self.zh_encoder(h, None)
+        en_h, _ = self.en_encoder(h, None)
+
+        zh_posteriors = self.zh_ctc.ctc_lo(zh_h)
+        en_posteriors = self.en_ctc.ctc_lo(en_h)
 
         # # # tmp code to try to view ctc outputs
         # from itertools import groupby
-        # # lpz = self.ctc.argmax(zh_h)
-        # # lpz = self.ctc.argmax(en_h)
-        # h = zh_h + en_h
-        # lpz = self.ctc.argmax(h)
+        # lpz = self.zh_ctc.argmax(zh_h)
+        # # lpz = self.en_ctc.argmax(en_h)
         # collapsed_indices = [x[0] for x in groupby(lpz[0])]
         # hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
         # nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
         # return nbest_hyps
 
-        h = zh_h + en_h
+        h = zh_posteriors + en_posteriors
 
+        h, _ = self.cond_chain(h, None)
+        
         h = h.squeeze(0)
 
         nbest_hyps = beam_search(h)

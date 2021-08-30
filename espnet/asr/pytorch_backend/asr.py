@@ -1141,6 +1141,7 @@ def recog(args):
                                 nbest_hyps[n]["yseq"].extend(hyps[n]["yseq"])
                                 nbest_hyps[n]["score"] += hyps[n]["score"]
                 elif hasattr(model, "is_rnnt"):
+                    # nbest_hyps = model.recognize(feat, beam_search_transducer, name=name)
                     nbest_hyps = model.recognize(feat, beam_search_transducer)
                 else:
                     nbest_hyps = model.recognize(

@@ -602,6 +602,17 @@ class E2E(ASRInterface, torch.nn.Module):
         zh_h, _ = self.zh_encoder(x, None)
         en_h, _ = self.en_encoder(x, None)
 
+        # # # tmp code to try to view ctc outputs
+        # from itertools import groupby
+        # # lpz = self.ctc.argmax(zh_h)
+        # lpz = self.ctc.argmax(en_h)
+        # # h = zh_h + en_h
+        # # lpz = self.ctc.argmax(h)
+        # collapsed_indices = [x[0] for x in groupby(lpz[0])]
+        # hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
+        # nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
+        # return nbest_hyps
+
         # gated fusion
         alpha = torch.sigmoid(self.w_alpha(torch.tanh(self.w_zh(zh_h) + self.w_en(en_h))))
         h = (alpha * zh_h) + ((1 - alpha) * en_h)

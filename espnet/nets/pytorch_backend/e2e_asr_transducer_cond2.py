@@ -673,7 +673,8 @@ class E2E(ASRInterface, torch.nn.Module):
 
         return hs.squeeze(0)
 
-    def recognize(self, x, beam_search):
+    # def recognize(self, x, beam_search, name=None):
+    def recognize(self, x, beam_search, name=None):
         """Recognize input features.
 
         Args:
@@ -688,7 +689,14 @@ class E2E(ASRInterface, torch.nn.Module):
         x = torch.as_tensor(x).unsqueeze(0)
         zh_h, _ = self.zh_encoder(x, None)
         en_h, _ = self.en_encoder(x, None)
-        # h, _ = self.encoder(x, None)
+
+        # # code to output posteriors
+        # zh_post = torch.nn.functional.softmax(self.zh_ctc.ctc_lo(zh_h), dim=2)
+        # en_post = torch.nn.functional.softmax(self.en_ctc.ctc_lo(en_h), dim=2)
+        # posts = torch.cat((zh_post,en_post),dim=0).numpy()
+        # numpy.save("posterior_line_chart/posts/"+name, posts)
+        # return [{"score": 0.0, "yseq": [self.sos]}]
+
 
         # # # tmp code to try to view ctc outputs
         # from itertools import groupby
@@ -698,11 +706,6 @@ class E2E(ASRInterface, torch.nn.Module):
         # hyp = [x for x in filter(lambda x: x != self.blank, collapsed_indices)]
         # nbest_hyps = [{"score": 0.0, "yseq": [self.sos] + hyp}]
         # return nbest_hyps
-
-        # if "custom" in self.etype:
-        #     h = self.encode_custom(x)
-        # else:
-        #     h = self.encode_rnn(x)
 
         # Fusion of Cond encoders with rnnt encoder
         if self.fusion_type == "add":

@@ -409,6 +409,8 @@ class E2E(ASRInterface, torch.nn.Module):
             cnn_module_kernel=args.cnn_module_kernel,
         )
 
+        if not hasattr(args, 'lang_elayers'):
+            args.lang_elayers = 2
         self.zh_encoder = Encoder_T(
             idim=odim,
             attention_dim=args.adim,

@@ -1,0 +1,86 @@
+# minibatch related
+batch-size: 12
+maxlen-in: 512
+maxlen-out: 150
+
+# optimization related
+criterion: loss
+early-stop-criterion: "validation/main/loss"
+sortagrad: 0
+opt: noam
+transformer-lr: 1.0
+transformer-warmup-steps: 25000
+epochs: 100
+patience: 0
+accum-grad: 1
+grad-clip: 5.0
+
+# network architecture
+## general
+custom-enc-positional-encoding-type: rel_pos
+custom-enc-self-attn-type: rel_self_attn
+custom-enc-pw-activation-type: swish
+## encoder related
+etype: custom
+custom-enc-input-layer: conv2d
+enc-block-arch:
+        - type: conformer
+          d_hidden: 256
+          d_ff: 2048
+          heads: 4
+          macaron_style: True
+          use_conv_mod: True
+          conv_mod_kernel: 15
+          dropout-rate: 0.3
+          att-dropout-rate: 0.3
+enc-block-repeat: 12
+## decoder related
+dtype: lstm
+dlayers: 1
+dec-embed-dim: 1024
+dunits: 512
+dropout-rate-embed-decoder: 0.2
+dropout-rate-decoder: 0.1
+## joint network related
+joint-dim: 512
+
+# transducer related
+model-module: "espnet.nets.pytorch_backend.e2e_asr_transducer_cond2:E2E"
+
+# reporter related
+report-wer: True
+report-cer: True
+
+trans-type: warp-rnnt
+
+
+
+# conditional related
+cond-weight: 0.3
+fusion-type: add
+gt-mask-type: lid
+
+zh-init: exp/train_zh_pytorch_ctc_conformer_specaug/results/model.acc.best
+zh-init-mods: encoder,ctc
+en-init: exp/train_en_pytorch_ctc_conformer_specaug/results/model.acc.best
+en-init-mods: encoder,ctc
+
+cond-dropout-rate: 0.1
+
+# encoder related
+cond-elayers: 12
+cond-eunits: 2048
+# decoder related
+cond-dlayers: 6
+cond-dunits: 2048
+# attention related
+adim: 256
+aheads: 4
+
+# conformer specific setting
+transformer-encoder-pos-enc-layer-type: rel_pos
+transformer-encoder-selfattn-layer-type: rel_selfattn
+transformer-encoder-activation-type: swish
+macaron-style: true
+use-cnn-module: true
+cnn-module-kernel: 15
