@@ -99,6 +99,8 @@ class NumElementsBatchSampler(AbsSampler):
             # Maybe we can't reach here
             raise RuntimeError("0 batches")
 
+        print("AVG BATCH SIZE:", np.mean(batch_sizes), flush=True)
+
         # If the last batch-size is smaller than minimum batch_size,
         # the samples are redistributed to the other mini-batches
         if len(batch_sizes) > 1 and batch_sizes[-1] < min_batch_size:

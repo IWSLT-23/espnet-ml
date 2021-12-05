@@ -61,6 +61,7 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_space: str = "<space>",
         sym_blank: str = "<blank>",
         extract_feats_in_collect_stats: bool = True,
+        marginalize_subwords: bool = False,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -100,6 +101,11 @@ class ESPnetASRModel(AbsESPnetModel):
             smoothing=lsm_weight,
             normalize_length=length_normalized_loss,
         )
+
+        # subword marginalization
+        #import pdb;pdb.set_trace()
+        if marginalize_subwords:
+            pass
 
         if report_cer or report_wer:
             self.error_calculator = ErrorCalculator(
@@ -149,6 +155,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 encoder_out, encoder_out_lens, text, text_lengths
             )
 
+        #import pdb;pdb.set_trace()
         # 2b. CTC branch
         if self.ctc_weight == 0.0:
             loss_ctc, cer_ctc = None, None

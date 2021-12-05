@@ -1,0 +1,1 @@
+../../../../egs2/swbd/asr1/local/build_S_graphs_gtn_raw.py

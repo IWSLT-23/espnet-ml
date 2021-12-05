@@ -44,8 +44,14 @@ class CTC(torch.nn.Module):
 
         elif self.ctc_type == "gtnctc":
             from espnet.nets.pytorch_backend.gtn_ctc import GTNCTCLossFunction
+            logging.warning("Using GTN CTC")
 
             self.ctc_loss = GTNCTCLossFunction.apply
+
+        elif self.ctc_type == "gtnctc_marginalized":
+            from espnet2.asr.gtn_ctc_marginalized import GTNCTCMargLossFunction
+
+            self.ctc_loss = GTNCTCMargLossFunction.apply
         else:
             raise ValueError(
                 f'ctc_type must be "builtin" or "warpctc": {self.ctc_type}'
@@ -122,7 +128,7 @@ class CTC(torch.nn.Module):
                 loss = loss.sum()
             return loss
 
-        elif self.ctc_type == "gtnctc":
+        elif "gtn" in self.ctc_type:
             log_probs = torch.nn.functional.log_softmax(th_pred, dim=2)
             return self.ctc_loss(log_probs, th_target, th_ilen, 0, "none")
 
@@ -141,7 +147,7 @@ class CTC(torch.nn.Module):
         # hs_pad: (B, L, NProj) -> ys_hat: (B, L, Nvocab)
         ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
 
-        if self.ctc_type == "gtnctc":
+        if "gtn" in self.ctc_type:
             # gtn expects list form for ys
             ys_true = [y[y != -1] for y in ys_pad]  # parse padded ys
         else:

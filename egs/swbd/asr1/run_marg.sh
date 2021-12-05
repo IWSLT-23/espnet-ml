@@ -280,8 +280,8 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
         --minibatches ${N} \
         --verbose ${verbose} \
         --resume ${resume} \
-        --train-json ${feat_tr_dir}/data_${bpemode}${nbpe}.json \
-        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.json
+        --train-json ${feat_tr_dir}/data_${bpemode}${nbpe}.json.wrd \
+        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.json.wrd
 fi
 
 if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then

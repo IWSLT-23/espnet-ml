@@ -5,6 +5,7 @@ import numpy as np
 import six
 import torch
 import torch.nn.functional as F
+import gtn
 
 from espnet.nets.pytorch_backend.nets_utils import to_device
 
@@ -53,6 +54,38 @@ class CTC(torch.nn.Module):
             from espnet.nets.pytorch_backend.gtn_ctc import GTNCTCLossFunction
 
             self.ctc_loss = GTNCTCLossFunction.apply
+        elif self.ctc_type == "gtnctc_marginalized":
+            from espnet.nets.pytorch_backend.gtn_ctc_marginalized import GTNCTCMargLossFunction
+
+            self.ctc_loss = GTNCTCMargLossFunction.apply
+
+            # load L graphs into RAM
+            self.L_graph_dict = {}
+            import glob
+            L_graph_path = "/project/ocean/byan/espnet-ml2/egs/swbd/asr1/data/lang_char/S_graphs_bpe2000/gtn_det_min/"
+            for f in glob.glob(L_graph_path+"*"):
+                wrd_idx = int(f.split("/")[-1].split(".")[0])
+                L_graph_gtn = gtn.loadtxt(f)
+                L_graph_gtn.calc_grad = False
+                self.L_graph_dict[wrd_idx] = L_graph_gtn
+        elif self.ctc_type == "gtnctc_marginalized_learn_word":
+            from espnet.nets.pytorch_backend.gtn_ctc_marginalized_learn_word import GTNCTCMargLossFunction
+
+            self.ctc_loss = GTNCTCMargLossFunction.apply
+
+            # load L graphs into RAM
+            self.L_graph_dict = {}
+            self.L_graph_lens = {}
+            import glob
+            L_graph_path = "/project/ocean/byan/espnet-ml2/egs/swbd/asr1/data/lang_char/S_graphs_bpe2000/gtn_det_min/"
+            for f in glob.glob(L_graph_path+"*"):
+                wrd_idx = int(f.split("/")[-1].split(".")[0])
+                L_graph_gtn = gtn.loadtxt(f)
+                self.L_graph_dict[wrd_idx] = L_graph_gtn
+                #L_graph_W.append(torch.nn.Parameter(torch.tensor(L_graph_gtn.weights_to_numpy(), requires_grad=True)))
+                self.L_graph_lens[wrd_idx] = L_graph_gtn.weights_to_numpy().shape[0]
+            self.L_graph_W = torch.nn.Parameter(torch.zeros((max(self.L_graph_lens.keys())+1, \
+                 max(self.L_graph_lens.values())), requires_grad=True, device=torch.device("cpu")))
         else:
             raise ValueError(
                 'ctc_type must be "builtin" or "warpctc": {}'.format(self.ctc_type)
@@ -77,6 +110,15 @@ class CTC(torch.nn.Module):
             targets = [t.tolist() for t in th_target]
             log_probs = torch.nn.functional.log_softmax(th_pred, dim=2)
             return self.ctc_loss(log_probs, targets, th_ilen, 0, "none")
+        elif self.ctc_type == "gtnctc_marginalized":
+            targets = [t.tolist() for t in th_target]
+            log_probs = torch.nn.functional.log_softmax(th_pred, dim=2)
+            return self.ctc_loss(log_probs, targets, self.L_graph_dict, th_ilen, 0, "none")
+        elif self.ctc_type == "gtnctc_marginalized_learn_word":
+            targets = [t.tolist() for t in th_target]
+            log_probs = torch.nn.functional.log_softmax(th_pred, dim=2)
+            #self.L_graph_W = self.L_graph_W.cpu()
+            return self.ctc_loss(log_probs, targets, self.L_graph_dict, self.L_graph_W.cpu(), self.L_graph_lens, th_ilen, 0, "none")
         else:
             raise NotImplementedError
 
@@ -95,7 +137,7 @@ class CTC(torch.nn.Module):
 
         # zero padding for hs
         ys_hat = self.ctc_lo(self.dropout(hs_pad))
-        if self.ctc_type != "gtnctc":
+        if "gtn" not in self.ctc_type:
             ys_hat = ys_hat.transpose(0, 1)
 
         if self.ctc_type == "builtin":
@@ -121,7 +163,7 @@ class CTC(torch.nn.Module):
             if self.ctc_type == "cudnnctc":
                 # use GPU when using the cuDNN implementation
                 ys_true = to_device(hs_pad, ys_true)
-            if self.ctc_type == "gtnctc":
+            if "gtn" in self.ctc_type:
                 # keep as list for gtn
                 ys_true = ys
             self.loss = to_device(

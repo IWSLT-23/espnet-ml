@@ -1,0 +1,1 @@
+../../../../egs2/swbd/asr1/local/convert_S_graphs_gtn_to_ofst.py
