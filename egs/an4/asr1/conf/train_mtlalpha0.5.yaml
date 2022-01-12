@@ -28,3 +28,5 @@ aconv-filts: 100
 
 # hybrid CTC/attention
 mtlalpha: 0.5
+
+ctc_type: gtnctc
