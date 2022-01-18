@@ -47,10 +47,11 @@ class GTNCTCLossFunction(torch.autograd.Function):
         :return: ctc loss value
         :rtype: torch.Tensor
         """
-        B, _, C = log_probs.shape
+        B, T, C = log_probs.shape
         losses = [None] * B
         scales = [None] * B
         emissions_graphs = [None] * B
+        viterbi_paths = torch.ones((B,T), requires_grad=False)*-1
 
         def process(b):
             # create emission graph
@@ -62,8 +63,9 @@ class GTNCTCLossFunction(torch.autograd.Function):
             # create criterion graph
             g_criterion = GTNCTCLossFunction.create_ctc_graph(targets[b], blank_idx)
             # compose the graphs
+            g_composed = gtn.intersect(g_emissions, g_criterion)
             g_loss = gtn.negate(
-                gtn.forward_score(gtn.intersect(g_emissions, g_criterion))
+                gtn.forward_score(g_composed)
             )
 
             scale = 1.0
@@ -78,20 +80,28 @@ class GTNCTCLossFunction(torch.autograd.Function):
             scales[b] = scale
             emissions_graphs[b] = g_emissions
 
+            # Save viterbi
+            viterbi_path = gtn.viterbi_path(g_composed).labels_to_list()
+            viterbi_paths[b][:len(viterbi_path)] = torch.tensor(viterbi_path, requires_grad=False)
+
         gtn.parallel_for(process, range(B))
+
+        #for b in range(B):
+        #    process(b)
 
         ctx.auxiliary_data = (losses, scales, emissions_graphs, log_probs.shape, ilens)
         loss = torch.tensor([losses[b].item() * scales[b] for b in range(B)])
-        return torch.mean(loss.cuda() if log_probs.is_cuda else loss)
+        return torch.mean(loss.cuda() if log_probs.is_cuda else loss), viterbi_paths
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output, viterbi_paths):
         """Backward computation.
 
         :param torch.tensor grad_output: backward passed gradient value
         :return: cumulative gradient output
         :rtype: (torch.Tensor, None, None, None)
         """
+        import pdb;pdb.set_trace()
         losses, scales, emissions_graphs, in_shape, ilens = ctx.auxiliary_data
         B, T, C = in_shape
         input_grad = torch.zeros((B, T, C))

@@ -44,7 +44,7 @@ remove_nonverbal=true  # remove non-verbal labels such as "( Applaus )"
 # NOTE: IWSLT community accepts this setting and therefore we use this by default
 
 # mtedx_datadir=download # original data directory to be stored
-mtedx_datadir=/n/work3/inaguma/mTEDx # original data directory to be stored
+mtedx_datadir=/usr0/home/byan/corpora/mtedx # original data directory to be stored
 
 # language related
 src_lang=es
@@ -304,17 +304,17 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
         fi
 
         # split data
-        splitjson.py --parts ${nj} ${feat_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json
+        #splitjson.py --parts ${nj} ${feat_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json
 
-        ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
-            mt_trans.py \
-            --config ${decode_config} \
-            --ngpu ${dec_ngpu} \
-            --backend ${backend} \
-            --batchsize 0 \
-            --trans-json ${feat_dir}/split${nj}utt/data_${bpemode}${nbpe}.JOB.json \
-            --result-label ${expdir}/${decode_dir}/data.JOB.json \
-            --model ${expdir}/results/${trans_model}
+        #${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
+        #    mt_trans.py \
+        #    --config ${decode_config} \
+        #    --ngpu ${dec_ngpu} \
+        #    --backend ${backend} \
+        #    --batchsize 0 \
+        #    --trans-json ${feat_dir}/split${nj}utt/data_${bpemode}${nbpe}.JOB.json \
+        #    --result-label ${expdir}/${decode_dir}/data.JOB.json \
+        #    --model ${expdir}/results/${trans_model}
 
         score_bleu.sh --case ${tgt_case} --bpemodel ${bpemodel}.model \
             --remove_nonverbal ${remove_nonverbal} \

@@ -209,7 +209,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # initialize parameters
         initialize(self, args.transformer_init)
 
-    def forward(self, xs_pad, ilens, ys_pad):
+    def forward(self, xs_pad, ilens, ys_pad, ys_bert_pad):
         """E2E forward.
 
         :param torch.Tensor xs_pad: batch of padded source sequences (B, Tmax, idim)
@@ -255,7 +255,7 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             batch_size = xs_pad.size(0)
             hs_len = hs_mask.view(batch_size, -1).sum(1)
-            loss_ctc = self.ctc(hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad)
+            loss_ctc, viterbi_paths = self.ctc(hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad)
             if not self.training and self.error_calculator is not None:
                 ys_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.adim)).data
                 cer_ctc = self.error_calculator(ys_hat.cpu(), ys_pad.cpu(), is_ctc=True)
@@ -272,6 +272,31 @@ class E2E(ASRInterface, torch.nn.Module):
                     loss_intermediate_ctc += loss_inter
 
                 loss_intermediate_ctc /= len(self.intermediate_ctc_layers)
+
+        # compute token aligned hs
+        import pdb; pdb.set_trace()
+        B, T, H = hs_pad.shape
+        _, L = ys_pad.shape
+        idx_batch = torch.ones(B, T, H, dtype=torch.int64, device=hs_pad.device)*-1
+        cnt_batch = torch.zeros(B, T, H, device=hs_pad.device)
+        tokenized_inter_hs = torch.zeros((B, L, H), requires_grad=True, device=hs_pad.device)
+        # TODO: check if the gradient is flowing back to the hs_pad
+        for b in range(B):
+            idx, cnt = align_to_index(viterbi_paths[b], ys_pad[b])
+            if torch.max(idx) >= L:
+                import pdb;pdb.set_trace()
+            idx_batch[b] = idx.unsqueeze(-1).repeat(1, H)
+            cnt_batch[b] = cnt.unsqueeze(-1).repeat(1, H)
+        import pdb; pdb.set_trace()
+        hs_pad = hs_pad.masked_fill(~hs_mask.squeeze().unsqueeze(-1).repeat(1,1,H), 0.)
+        hs_pad = hs_pad / cnt_batch
+        tokenized_inter_hs = tokenized_inter_hs.scatter_add(1, idx_batch, hs_pad)
+        #TODO: linear layer
+        import pdb; pdb.set_trace()
+
+        # get BERT hs
+
+
 
         # 5. compute cer/wer
         if self.training or self.error_calculator is None or self.decoder is None:
@@ -550,7 +575,7 @@ class E2E(ASRInterface, torch.nn.Module):
         )
         return nbest_hyps
 
-    def calculate_all_attentions(self, xs_pad, ilens, ys_pad):
+    def calculate_all_attentions(self, xs_pad, ilens, ys_pad, ys_bert_pad):
         """E2E attention calculation.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -561,7 +586,7 @@ class E2E(ASRInterface, torch.nn.Module):
         """
         self.eval()
         with torch.no_grad():
-            self.forward(xs_pad, ilens, ys_pad)
+            self.forward(xs_pad, ilens, ys_pad, ys_bert_pad)
         ret = dict()
         for name, m in self.named_modules():
             if (
@@ -576,7 +601,7 @@ class E2E(ASRInterface, torch.nn.Module):
         self.train()
         return ret
 
-    def calculate_all_ctc_probs(self, xs_pad, ilens, ys_pad):
+    def calculate_all_ctc_probs(self, xs_pad, ilens, ys_pad, ys_bert_pad):
         """E2E CTC probability calculation.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax)
@@ -591,7 +616,7 @@ class E2E(ASRInterface, torch.nn.Module):
 
         self.eval()
         with torch.no_grad():
-            self.forward(xs_pad, ilens, ys_pad)
+            self.forward(xs_pad, ilens, ys_pad, ys_bert_pad)
         for name, m in self.named_modules():
             if isinstance(m, CTC) and m.probs is not None:
                 ret = m.probs.cpu().numpy()

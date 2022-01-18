@@ -28,11 +28,12 @@ class CTC(torch.nn.Module):
         self.probs = None  # for visualization
 
         # In case of Pytorch >= 1.7.0, CTC will be always builtin
-        self.ctc_type = (
-            ctc_type
-            if LooseVersion(torch.__version__) < LooseVersion("1.7.0")
-            else "builtin"
-        )
+        #self.ctc_type = (
+        #    ctc_type
+        #    if LooseVersion(torch.__version__) < LooseVersion("1.7.0")
+        #    else "builtin"
+        #)
+        self.ctc_type = ctc_type
 
         if ctc_type != self.ctc_type:
             logging.warning(f"CTC was set to {self.ctc_type} due to PyTorch version.")
@@ -124,9 +125,18 @@ class CTC(torch.nn.Module):
             if self.ctc_type == "gtnctc":
                 # keep as list for gtn
                 ys_true = ys
-            self.loss = to_device(
-                hs_pad, self.loss_fn(ys_hat, ys_true, hlens, olens)
-            ).to(dtype=dtype)
+                self.loss, viterbi_paths = self.loss_fn(ys_hat, ys_true, hlens, olens)
+
+                self.loss = to_device(
+                    hs_pad, self.loss
+                ).to(dtype=dtype)
+                viterbi_paths = to_device(
+                    hs_pad, viterbi_paths
+                ).to(dtype=dtype)
+            else:
+                self.loss = to_device(
+                    hs_pad, self.loss_fn(ys_hat, ys_true, hlens, olens)
+                ).to(dtype=dtype)
 
         # get length info
         logging.info(
@@ -147,7 +157,10 @@ class CTC(torch.nn.Module):
             self.loss = self.loss.sum()
             logging.info("ctc loss:" + str(float(self.loss)))
 
-        return self.loss
+        if self.ctc_type == "gtnctc":
+            return self.loss, viterbi_paths
+        else:
+            return self.loss
 
     def softmax(self, hs_pad):
         """softmax of frame activations

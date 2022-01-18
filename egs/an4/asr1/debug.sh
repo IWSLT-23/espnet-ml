@@ -207,7 +207,7 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     #${cuda_cmd} --gpu ${ngpu} ${expdir}/train.log \
     asr_train.py \
     --config ${train_config} \
-    --ngpu 1 \
+    --ngpu 0 \
     --backend ${backend} \
     --outdir ${expdir}/results \
     --tensorboard-dir tensorboard/${expname} \
