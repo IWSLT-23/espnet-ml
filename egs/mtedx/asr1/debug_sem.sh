@@ -10,7 +10,7 @@
 backend=pytorch
 stage=-1        # start from -1 if you need to start from data download
 stop_stage=100
-ngpu=4          # number of gpus during training ("0" uses cpu, otherwise use gpu)
+ngpu=2          # number of gpus during training ("0" uses cpu, otherwise use gpu)
 dec_ngpu=0      # number of gpus during decoding ("0" uses cpu, otherwise use gpu)
 nj=8            # number of parallel jobs for decoding
 debugmode=1
@@ -229,24 +229,23 @@ mkdir -p ${expdir}
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     echo "stage 4: Network Training"
 
-    ${cuda_cmd} --gpu ${ngpu} ${expdir}/train.log \
-        asr_train.py \
-        --config ${train_config} \
-        --preprocess-conf ${preprocess_config} \
-        --ngpu ${ngpu} \
-        --backend ${backend} \
-        --outdir ${expdir}/results \
-        --tensorboard-dir tensorboard/${expname} \
-        --debugmode ${debugmode} \
-        --dict ${dict} \
-        --debugdir ${expdir} \
-        --minibatches ${N} \
-        --seed ${seed} \
-        --verbose ${verbose} \
-        --resume ${resume} \
-        --train-json ${feat_tr_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json \
-        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json \
-        --n-iter-processes 2
+    asr_train.py \
+    --config ${train_config} \
+    --preprocess-conf ${preprocess_config} \
+    --ngpu 1 \
+    --backend ${backend} \
+    --outdir ${expdir}/results \
+    --tensorboard-dir tensorboard/${expname} \
+    --debugmode ${debugmode} \
+    --dict ${dict} \
+    --debugdir ${expdir} \
+    --minibatches ${N} \
+    --seed ${seed} \
+    --verbose ${verbose} \
+    --resume ${resume} \
+    --train-json ${feat_tr_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json.tok2wrd \
+    --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json.tok2wrd \
+    --n-iter-processes 2
 fi
 
 trans_set="test.${src_lang}-${tgt_lang}.${tgt_lang}"

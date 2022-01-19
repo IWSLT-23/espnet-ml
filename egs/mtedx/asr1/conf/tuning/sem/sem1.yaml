@@ -29,7 +29,7 @@ dropout-rate: 0.1
 
 # transformer specific setting
 backend: pytorch
-model-module: "espnet.nets.pytorch_backend.e2e_asr_conformer:E2E"
+model-module: "espnet.nets.pytorch_backend.e2e_asr_conformer_sem:E2E"
 transformer-input-layer: conv2d     # encoder architecture type
 transformer-lr: 12.5
 transformer-warmup-steps: 25000
@@ -54,4 +54,4 @@ macaron-style: true
 use-cnn-module: true
 cnn-module-kernel: 15
 
-ctc_type: builtin
+ctc_type: gtnctc_sem

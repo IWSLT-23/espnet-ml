@@ -54,6 +54,10 @@ class CTC(torch.nn.Module):
             from espnet.nets.pytorch_backend.gtn_ctc import GTNCTCLossFunction
 
             self.ctc_loss = GTNCTCLossFunction.apply
+        elif self.ctc_type == "gtnctc_sem":
+            from espnet.nets.pytorch_backend.gtn_ctc_sem import GTNCTCLossFunction
+
+            self.ctc_loss = GTNCTCLossFunction.apply
         else:
             raise ValueError(
                 'ctc_type must be "builtin" or "warpctc": {}'.format(self.ctc_type)
@@ -74,7 +78,7 @@ class CTC(torch.nn.Module):
             return loss
         elif self.ctc_type == "warpctc":
             return self.ctc_loss(th_pred, th_target, th_ilen, th_olen)
-        elif self.ctc_type == "gtnctc":
+        elif self.ctc_type == "gtnctc" or self.ctc_type == "gtnctc_sem":
             targets = [t.tolist() for t in th_target]
             log_probs = torch.nn.functional.log_softmax(th_pred, dim=2)
             return self.ctc_loss(log_probs, targets, th_ilen, 0, "none")
@@ -96,7 +100,7 @@ class CTC(torch.nn.Module):
 
         # zero padding for hs
         ys_hat = self.ctc_lo(self.dropout(hs_pad))
-        if self.ctc_type != "gtnctc":
+        if self.ctc_type != "gtnctc" and self.ctc_type != "gtnctc_sem":
             ys_hat = ys_hat.transpose(0, 1)
 
         if self.ctc_type == "builtin":
@@ -123,6 +127,14 @@ class CTC(torch.nn.Module):
                 # use GPU when using the cuDNN implementation
                 ys_true = to_device(hs_pad, ys_true)
             if self.ctc_type == "gtnctc":
+                # keep as list for gtn
+                ys_true = ys
+                self.loss = self.loss_fn(ys_hat, ys_true, hlens, olens)
+
+                self.loss = to_device(
+                    hs_pad, self.loss
+                ).to(dtype=dtype)
+            if self.ctc_type == "gtnctc_sem":
                 # keep as list for gtn
                 ys_true = ys
                 self.loss, viterbi_paths = self.loss_fn(ys_hat, ys_true, hlens, olens)
@@ -157,7 +169,7 @@ class CTC(torch.nn.Module):
             self.loss = self.loss.sum()
             logging.info("ctc loss:" + str(float(self.loss)))
 
-        if self.ctc_type == "gtnctc":
+        if self.ctc_type == "gtnctc_sem":
             return self.loss, viterbi_paths
         else:
             return self.loss

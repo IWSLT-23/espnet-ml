@@ -51,6 +51,7 @@ class GTNCTCLossFunction(torch.autograd.Function):
         losses = [None] * B
         scales = [None] * B
         emissions_graphs = [None] * B
+        viterbi_paths = torch.ones((B,T), requires_grad=False)*-1
 
         def process(b):
             # create emission graph
@@ -79,6 +80,10 @@ class GTNCTCLossFunction(torch.autograd.Function):
             scales[b] = scale
             emissions_graphs[b] = g_emissions
 
+            # Save viterbi
+            viterbi_path = gtn.viterbi_path(g_composed).labels_to_list()
+            viterbi_paths[b][:len(viterbi_path)] = torch.tensor(viterbi_path, requires_grad=False)
+
         gtn.parallel_for(process, range(B))
 
         #for b in range(B):
@@ -86,10 +91,10 @@ class GTNCTCLossFunction(torch.autograd.Function):
 
         ctx.auxiliary_data = (losses, scales, emissions_graphs, log_probs.shape, ilens)
         loss = torch.tensor([losses[b].item() * scales[b] for b in range(B)])
-        return torch.mean(loss.cuda() if log_probs.is_cuda else loss)
+        return torch.mean(loss.cuda() if log_probs.is_cuda else loss), viterbi_paths
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output, viterbi_paths):
         """Backward computation.
 
         :param torch.tensor grad_output: backward passed gradient value

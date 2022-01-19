@@ -263,7 +263,10 @@ class CustomConverter(object):
         """
         # batch should be located in list
         assert len(batch) == 1
-        xs, ys = batch[0]
+        if len(batch[0]) == 5:
+            xs, ys, ys_bert, spm2wrd, bert2wrd = batch[0]
+        else:
+            xs, ys = batch[0]
 
         # perform subsampling
         if self.subsampling_factor > 1:
@@ -303,7 +306,39 @@ class CustomConverter(object):
             self.ignore_id,
         ).to(device)
 
-        return xs_pad, ilens, ys_pad
+        if len(batch[0]) == 5:
+            ys_bert_pad = pad_list(
+                [
+                    torch.from_numpy(
+                        np.array(y[0][:]) if isinstance(y, tuple) else y
+                    ).long()
+                    for y in ys_bert
+                ],
+                1,  #this is bert's pad id
+            ).to(device)
+
+            spm2wrd_pad = pad_list(
+                [
+                    torch.from_numpy(
+                        np.array(y[0][:]) if isinstance(y, tuple) else y
+                    ).long()
+                    for y in spm2wrd
+                ],
+                self.ignore_id,
+            ).to(device)
+
+            bert2wrd_pad = pad_list(
+                [
+                    torch.from_numpy(
+                        np.array(y[0][:]) if isinstance(y, tuple) else y
+                    ).long()
+                    for y in bert2wrd
+                ],
+                self.ignore_id,
+            ).to(device)
+            return xs_pad, ilens, ys_pad, ys_bert_pad, spm2wrd_pad, bert2wrd_pad
+        else:
+            return xs_pad, ilens, ys_pad
 
 
 class CustomConverterMulEnc(object):

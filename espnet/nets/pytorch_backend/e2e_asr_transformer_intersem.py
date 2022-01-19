@@ -207,7 +207,10 @@ class E2E(ASRInterface, torch.nn.Module):
         self.rnnlm = None
 
         # spm to bert size regression
-        self.regression = torch.nn.Sequential(torch.nn.Dropout(args.dropout_rate), torch.nn.Linear(args.adim, 768))  # hard-coded
+        self.regression = torch.nn.ModuleList(
+                            [torch.nn.Sequential(torch.nn.Dropout(args.dropout_rate), torch.nn.Linear(args.adim, 768))
+                                for x in range(len(self.intermediate_ctc_layers))]
+                            )  # hard-coded
 
         # bert model
         self.bert = AutoModel.from_pretrained("dccuchile/bert-base-spanish-wwm-uncased", output_hidden_states=True)
@@ -300,30 +303,37 @@ class E2E(ASRInterface, torch.nn.Module):
             cnt_batch[b] = cnt.unsqueeze(-1).repeat(1, H)
         hs_pad = hs_pad.masked_fill(~hs_mask.squeeze().unsqueeze(-1).repeat(1,1,H), 0.)
         hs_pad = hs_pad / cnt_batch
-        tokenized_inter_hs = tokenized_inter_hs.scatter_add(1, idx_batch, hs_pad)
         # now pool to wrd
         n_wrds = spm2wrd.max() + 1     # should be same as bert2wrd.max()
         spm_mask = (spm2wrd == -1).unsqueeze(-1).repeat(1,1,H)
-        tokenized_inter_hs = tokenized_inter_hs.masked_fill(spm_mask, 0)    # this step should be redundant
         spm2wrd = spm2wrd.unsqueeze(-1).repeat(1,1,H).masked_fill(spm_mask, 0)
-        spm_wrd_hs = torch.zeros((B, n_wrds, H), requires_grad=True, device=hs_pad.device)
-        spm_wrd_hs = spm_wrd_hs.scatter_add(1, spm2wrd, tokenized_inter_hs)
-        spm_wrd_hs_regress = self.regression(spm_wrd_hs)
 
         # get BERT hs
         bert_input = {"token_type_ids": ys_bert_pad.new_zeros(ys_bert_pad.size()),\
                       "input_ids": ys_bert_pad,\
                       "attention_mask": (ys_bert_pad != 1).int()}
-        bert_output = self.bert(**bert_input)['last_hidden_state']
-        _, _, bert_H = bert_output.shape
+
+        bert_output = self.bert(**bert_input)
+        _, _, bert_H = bert_output['last_hidden_state'].shape
 
         bert_mask = (bert2wrd == -1).unsqueeze(-1).repeat(1,1,bert_H)
-        bert_output = bert_output.masked_fill(bert_mask, 0)
         bert2wrd = bert2wrd.unsqueeze(-1).repeat(1,1,bert_H).masked_fill(bert_mask, 0)  # remove -1 index to be index 0, but the values are masked
-        bert_wrd_hs = torch.zeros((B, n_wrds, bert_H), requires_grad=False, device=hs_pad.device)   # bert side does not update
-        bert_wrd_hs = bert_wrd_hs.scatter_add(1, bert2wrd, bert_output)
 
-        spm2bert_dist = self.dist(spm_wrd_hs_regress, bert_wrd_hs)
+        # intersem
+        spm2bert_dist = 0.0
+        for i, layer in enumerate(self.intermediate_ctc_layers):
+            tokenized_inter_hs = tokenized_inter_hs.scatter_add(1, idx_batch, hs_intermediates[i])
+            tokenized_inter_hs = tokenized_inter_hs.masked_fill(spm_mask, 0)    # this step should be redundant
+            spm_wrd_hs = torch.zeros((B, n_wrds, H), requires_grad=True, device=hs_pad.device)
+            spm_wrd_hs = spm_wrd_hs.scatter_add(1, spm2wrd, tokenized_inter_hs)
+            spm_wrd_hs_regress = self.regression[i](spm_wrd_hs)
+
+            bert_hs = bert_output['hidden_states'][layer].masked_fill(bert_mask, 0) #not -1 because there is embedding layer
+            bert_wrd_hs = torch.zeros((B, n_wrds, bert_H), requires_grad=False, device=hs_pad.device)   # bert side does not update
+            bert_wrd_hs = bert_wrd_hs.scatter_add(1, bert2wrd, bert_hs)
+
+            spm2bert_dist += self.dist(spm_wrd_hs_regress, bert_wrd_hs)
+        spm2bert_dist /= len(self.intermediate_ctc_layers)
 
         # 5. compute cer/wer
         if self.training or self.error_calculator is None or self.decoder is None:

@@ -54,4 +54,4 @@ macaron-style: true
 use-cnn-module: true
 cnn-module-kernel: 15
 
-ctc_type: builtin
+ctc_type: gtnctc

@@ -10,7 +10,7 @@
 backend=pytorch
 stage=-1        # start from -1 if you need to start from data download
 stop_stage=100
-ngpu=4          # number of gpus during training ("0" uses cpu, otherwise use gpu)
+ngpu=2          # number of gpus during training ("0" uses cpu, otherwise use gpu)
 dec_ngpu=0      # number of gpus during decoding ("0" uses cpu, otherwise use gpu)
 nj=8            # number of parallel jobs for decoding
 debugmode=1
@@ -42,7 +42,7 @@ mt_model=
 
 # preprocessing related
 src_case=lc.rm
-tgt_case=lc.rm
+tgt_case=tc
 # tc: truecase
 # lc: lowercase
 # lc.rm: lowercase with punctuation removal
@@ -56,7 +56,7 @@ mtedx_datadir=/usr0/home/byan/corpora/mtedx # original data directory to be stor
 
 # language related
 src_lang=es
-tgt_lang=es
+tgt_lang=en
 # English (en)
 # French (fr)
 # German (de)
@@ -189,18 +189,42 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
     done
 fi
 
-dict=../st1/data/lang_1spm/train.${src_lang}-en.en_${bpemode}${nbpe}_units_tc.txt
-nlsyms=../st1/data/lang_1spm/train.${src_lang}-en.en_non_lang_syms_tc.txt
-bpemodel=../st1/data/lang_1spm/train.${src_lang}-en.en_${bpemode}${nbpe}_tc
+dict=data/lang_1spm/${train_set}_${bpemode}${nbpe}_units_${tgt_case}.txt
+nlsyms=data/lang_1spm/${train_set}_non_lang_syms_${tgt_case}.txt
+bpemodel=data/lang_1spm/${train_set}_${bpemode}${nbpe}_${tgt_case}
 echo "dictionary: ${dict}"
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
     ### Task dependent. You have to check non-linguistic symbols used in the corpus.
     echo "stage 2: Dictionary and Json Data Preparation"
+    mkdir -p data/lang_1spm/
+
+    echo "make a non-linguistic symbol list for all languages"
+    cat data/train.${src_lang}-${tgt_lang}.*/text.${tgt_case} | cut -f 2- -d' ' | grep -o -P '&[^;]*;'| sort | uniq > ${nlsyms}
+    cat ${nlsyms}
+
+    echo "make a joint source and target dictionary"
+    echo "<unk> 1" > ${dict} # <unk> must be 1, 0 will be used for "blank" in CTC
+    offset=$(wc -l < ${dict})
+    cat data/train.${src_lang}-${tgt_lang}.*/text.${tgt_case} | cut -f 2- -d' ' | grep -v -e '^\s*$' > data/lang_1spm/input_${src_lang}_${tgt_lang}_${tgt_case}.txt
+    spm_train --user_defined_symbols="$(tr "\n" "," < ${nlsyms})" --input=data/lang_1spm/input_${src_lang}_${tgt_lang}_${tgt_case}.txt \
+        --vocab_size=${nbpe} --model_type=${bpemode} --model_prefix=${bpemodel} --input_sentence_size=100000000 --character_coverage=1.0
+    spm_encode --model=${bpemodel}.model --output_format=piece < data/lang_1spm/input_${src_lang}_${tgt_lang}_${tgt_case}.txt \
+        | tr ' ' '\n' | sort | uniq | awk -v offset=${offset} '{print $0 " " NR+offset}' >> ${dict}
+    wc -l ${dict}
+
     echo "make json files"
     for x in ${train_set} ${train_dev} ${trans_set}; do
         feat_dir=${dumpdir}/${x}/delta${do_delta}
         data2json.sh --nj 16 --feat ${feat_dir}/feats.scp --text data/${x}/text.${tgt_case} --bpecode ${bpemodel}.model --lang "${tgt_lang}" \
             data/${x} ${dict} > ${feat_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json
+    done
+
+    # update json (add source references)
+    for x in ${train_set} ${train_dev} ${trans_set}; do
+        feat_dir=${dumpdir}/${x}/delta${do_delta}
+        data_dir=data/$(echo ${x} | cut -f 1 -d ".").${src_lang}-${tgt_lang}.${src_lang}
+        update_json.sh --text ${data_dir}/text.${src_case} --bpecode ${bpemodel}.model \
+            ${feat_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json ${data_dir} ${dict}
     done
 fi
 
@@ -223,30 +247,31 @@ if [ -z ${tag} ]; then
 else
     expname=${train_set}_${tgt_case}_${backend}_${tag}
 fi
-expdir=exp/${expname}
+expdir=exp/sem_${expname}
 mkdir -p ${expdir}
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     echo "stage 4: Network Training"
 
-    ${cuda_cmd} --gpu ${ngpu} ${expdir}/train.log \
-        asr_train.py \
-        --config ${train_config} \
-        --preprocess-conf ${preprocess_config} \
-        --ngpu ${ngpu} \
-        --backend ${backend} \
-        --outdir ${expdir}/results \
-        --tensorboard-dir tensorboard/${expname} \
-        --debugmode ${debugmode} \
-        --dict ${dict} \
-        --debugdir ${expdir} \
-        --minibatches ${N} \
-        --seed ${seed} \
-        --verbose ${verbose} \
-        --resume ${resume} \
-        --train-json ${feat_tr_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json \
-        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json \
-        --n-iter-processes 2
+    st_train.py \
+    --config ${train_config} \
+    --preprocess-conf ${preprocess_config} \
+    --ngpu 0 \
+    --backend ${backend} \
+    --outdir ${expdir}/results \
+    --tensorboard-dir tensorboard/${expname} \
+    --debugmode ${debugmode} \
+    --dict ${dict} \
+    --debugdir ${expdir} \
+    --minibatches ${N} \
+    --seed ${seed} \
+    --verbose ${verbose} \
+    --resume ${resume} \
+    --train-json ${feat_tr_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json.tok2wrd \
+    --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json.tok2wrd \
+    --enc-init ${asr_model} \
+    --dec-init ${mt_model} \
+    --n-iter-processes 2
 fi
 
 trans_set="test.${src_lang}-${tgt_lang}.${tgt_lang}"
@@ -291,17 +316,18 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
         splitjson.py --parts ${nj} ${feat_dir}/data_${bpemode}${nbpe}.${src_case}_${tgt_case}.json
 
         ${decode_cmd} JOB=1:${nj} ${expdir}/${decode_dir}/log/decode.JOB.log \
-            asr_recog.py \
+            st_trans.py \
             --config ${decode_config} \
             --ngpu ${dec_ngpu} \
             --backend ${backend} \
             --batchsize 0 \
-            --recog-json ${feat_dir}/split${nj}utt/data_${bpemode}${nbpe}.JOB.json \
+            --trans-json ${feat_dir}/split${nj}utt/data_${bpemode}${nbpe}.JOB.json \
             --result-label ${expdir}/${decode_dir}/data.JOB.json \
             --model ${expdir}/results/${trans_model}
 
-        score_sclite_case.sh --case ${src_case} --bpe ${nbpe} --bpemodel ${bpemodel}.model --wer true \
-            ${expdir}/${decode_dir} ${dict}
+        score_bleu.sh --case ${tgt_case} --bpemodel ${bpemodel}.model \
+            --remove_nonverbal ${remove_nonverbal} \
+            ${expdir}/${decode_dir} "${tgt_lang}" ${dict}
 
         calculate_rtf.py --log-dir ${expdir}/${decode_dir}/log
     ) &
