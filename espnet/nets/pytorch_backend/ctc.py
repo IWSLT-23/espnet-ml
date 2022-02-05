@@ -26,6 +26,7 @@ class CTC(torch.nn.Module):
         self.ctc_lo = torch.nn.Linear(eprojs, odim)
         self.dropout = torch.nn.Dropout(dropout_rate)
         self.probs = None  # for visualization
+        # self.dummy_param = torch.nn.Parameter(torch.empty(0))
 
         # In case of Pytorch >= 1.7.0, CTC will be always builtin
         self.ctc_type = (

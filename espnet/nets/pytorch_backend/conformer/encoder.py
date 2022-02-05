@@ -93,7 +93,8 @@ class Encoder(torch.nn.Module):
         padding_idx=-1,
         stochastic_depth_rate=0.0,
         intermediate_layers=None,
-        ctc_softmax=None,
+        # ctc_softmax=None,
+        ctc_softmax=False,
         conditioning_layer_dim=None,
     ):
         """Construct an Encoder object."""
@@ -230,14 +231,15 @@ class Encoder(torch.nn.Module):
             self.after_norm = LayerNorm(attention_dim)
 
         self.intermediate_layers = intermediate_layers
-        self.use_conditioning = True if ctc_softmax is not None else False
+        # self.use_conditioning = True if ctc_softmax is not None else False
+        self.use_conditioning = ctc_softmax
         if self.use_conditioning:
-            self.ctc_softmax = ctc_softmax
+            # self.ctc_softmax = ctc_softmax
             self.conditioning_layer = torch.nn.Linear(
                 conditioning_layer_dim, attention_dim
             )
 
-    def forward(self, xs, masks):
+    def forward(self, xs, masks, ctc_softmax=None):
         """Encode input sequence.
 
         Args:
@@ -276,7 +278,8 @@ class Encoder(torch.nn.Module):
                     intermediate_outputs.append(encoder_output)
 
                     if self.use_conditioning:
-                        intermediate_result = self.ctc_softmax(encoder_output)
+                        # intermediate_result = self.ctc_softmax(encoder_output)
+                        intermediate_result = ctc_softmax(encoder_output)
 
                         if isinstance(xs, tuple):
                             x, pos_emb = xs[0], xs[1]
