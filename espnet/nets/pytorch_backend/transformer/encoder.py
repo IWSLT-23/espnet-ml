@@ -258,12 +258,13 @@ class Encoder(torch.nn.Module):
             self.after_norm = LayerNorm(attention_dim)
 
         self.intermediate_layers = intermediate_layers
-        self.use_conditioning = True if ctc_softmax is not None else False
+        # self.use_conditioning = True if ctc_softmax is not None else False
+        self.use_conditioning = ctc_softmax
         if self.use_conditioning:
-            self.ctc_softmax = ctc_softmax
-            self.conditioning_layer = torch.nn.Linear(
-                conditioning_layer_dim, attention_dim
-            )
+            # self.ctc_softmax = ctc_softmax
+            self.conditioning_layer = torch.nn.ModuleList([torch.nn.Linear(
+                d, attention_dim
+            ) for d in conditioning_layer_dim])
 
     def get_positionwise_layer(
         self,

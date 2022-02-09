@@ -59,6 +59,8 @@ bpemode=unigram
 # exp tag
 tag="" # tag for managing experiments.
 
+data_tag=
+
 . utils/parse_options.sh || exit 1;
 
 # Set bash to 'debug' mode, it will exit on :
@@ -154,18 +156,18 @@ echo "dictionary: ${dict}"
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
     ### Task dependent. You have to check non-linguistic symbols used in the corpus.
     echo "stage 2: Dictionary and Json Data Preparation"
-    #mkdir -p data/lang_char/
-    #echo "<unk> 1" > ${dict} # <unk> must be 1, 0 will be used for "blank" in CTC
-    #cut -f 2- -d" " data/${train_set}/text > data/lang_char/input.txt
-    #spm_train --input=data/lang_char/input.txt --vocab_size=${nbpe} --model_type=${bpemode} --model_prefix=${bpemodel} --input_sentence_size=100000000
-    #spm_encode --model=${bpemodel}.model --output_format=piece < data/lang_char/input.txt | tr ' ' '\n' | sort | uniq | awk '{print $0 " " NR+1}' >> ${dict}
-    #wc -l ${dict}
+    mkdir -p data/lang_char/
+    echo "<unk> 1" > ${dict} # <unk> must be 1, 0 will be used for "blank" in CTC
+    cut -f 2- -d" " data/${train_set}/text > data/lang_char/input.txt
+    spm_train --input=data/lang_char/input.txt --vocab_size=${nbpe} --model_type=${bpemode} --model_prefix=${bpemodel} --input_sentence_size=100000000
+    spm_encode --model=${bpemodel}.model --output_format=piece < data/lang_char/input.txt | tr ' ' '\n' | sort | uniq | awk '{print $0 " " NR+1}' >> ${dict}
+    wc -l ${dict}
 
-    ## make json labels
-    #data2json.sh --nj ${nj} --feat ${feat_sp_dir}/feats.scp --bpecode ${bpemodel}.model \
-    #    data/${train_sp} ${dict} > ${feat_sp_dir}/data_${bpemode}${nbpe}.json
-    #data2json.sh --nj ${nj} --feat ${feat_dt_dir}/feats.scp --bpecode ${bpemodel}.model \
-    #    data/${train_dev} ${dict} > ${feat_dt_dir}/data_${bpemode}${nbpe}.json
+    # make json labels
+    data2json.sh --nj ${nj} --feat ${feat_sp_dir}/feats.scp --bpecode ${bpemodel}.model \
+        data/${train_sp} ${dict} > ${feat_sp_dir}/data_${bpemode}${nbpe}.json
+    data2json.sh --nj ${nj} --feat ${feat_dt_dir}/feats.scp --bpecode ${bpemodel}.model \
+        data/${train_dev} ${dict} > ${feat_dt_dir}/data_${bpemode}${nbpe}.json
 
     for rtask in ${recog_set}; do
         feat_recog_dir=${dumpdir}/${rtask}/delta${do_delta}
@@ -224,7 +226,13 @@ if [ -z ${tag} ]; then
 else
     expname=${train_set}_${backend}_${tag}
 fi
+if [[ "$nbpe" -eq 5000 ]]; then
+    expname=${expname}
+else
+    expname=${expname}_nbpe${nbpe}
+fi
 expdir=exp/${expname}
+
 mkdir -p ${expdir}
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
@@ -243,8 +251,8 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
         --minibatches ${N} \
         --verbose ${verbose} \
         --resume ${resume} \
-        --train-json ${feat_sp_dir}/data_${bpemode}${nbpe}.json \
-        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.json
+        --train-json ${feat_sp_dir}/data_${bpemode}${nbpe}.json${data_tag} \
+        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.json${data_tag}
 fi
 
 if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then

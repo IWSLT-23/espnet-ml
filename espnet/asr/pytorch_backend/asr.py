@@ -263,7 +263,14 @@ class CustomConverter(object):
         """
         # batch should be located in list
         assert len(batch) == 1
-        xs, ys = batch[0]
+
+        # be robust to multiple targets
+        if len(batch[0]) == 2:
+            xs, ys = batch[0]
+        elif len(batch[0]) == 4:
+            xs, ys, ys_int1, ys_int2 = batch[0]
+        else:
+            import pdb;pdb.set_trace()
 
         # perform subsampling
         if self.subsampling_factor > 1:
@@ -303,7 +310,30 @@ class CustomConverter(object):
             self.ignore_id,
         ).to(device)
 
-        return xs_pad, ilens, ys_pad
+        ys_int1_pad = pad_list(
+            [
+                torch.from_numpy(
+                    np.array(y[0][:]) if isinstance(y, tuple) else y
+                ).long()
+                for y in ys_int1
+            ],
+            self.ignore_id,
+        ).to(device)
+
+        ys_int2_pad = pad_list(
+            [
+                torch.from_numpy(
+                    np.array(y[0][:]) if isinstance(y, tuple) else y
+                ).long()
+                for y in ys_int2
+            ],
+            self.ignore_id,
+        ).to(device)
+
+        if len(batch[0]) == 2:
+            return xs_pad, ilens, ys_pad
+        elif len(batch[0]) == 4:
+            return xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad
 
 
 class CustomConverterMulEnc(object):
@@ -396,10 +426,21 @@ def train(args):
     idim_list = [
         int(valid_json[utts[0]]["input"][i]["shape"][-1]) for i in range(args.num_encs)
     ]
-    odim = int(valid_json[utts[0]]["output"][0]["shape"][-1])
-    for i in range(args.num_encs):
-        logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
-    logging.info("#output dims: " + str(odim))
+    if len(valid_json[utts[0]]["output"]) == 1:
+        odim = int(valid_json[utts[0]]["output"][0]["shape"][-1])
+        for i in range(args.num_encs):
+            logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
+        logging.info("#output dims: " + str(odim))
+    elif len(valid_json[utts[0]]["output"]) == 3:
+        odim = [
+            int(valid_json[utts[0]]["output"][i]["shape"][-1]) for i in range(len(valid_json[utts[0]]["output"]))
+        ]
+        for i in range(args.num_encs):
+            logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
+        for i in range(3):
+            logging.info("output{}: output dims : {}".format(i + 1, odim[i]))
+    else:
+        import pdb;pdb.set_trace()
 
     # specify attention, CTC, hybrid mode
     if "transducer" in args.model_module:

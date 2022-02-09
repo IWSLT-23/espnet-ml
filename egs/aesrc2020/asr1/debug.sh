@@ -10,7 +10,7 @@
 backend=pytorch
 stage=-1       # start from -1 if you need to start from data download
 stop_stage=100
-ngpu=8         # number of gpus ("0" uses cpu, otherwise use gpu)
+ngpu=1         # number of gpus ("0" uses cpu, otherwise use gpu)
 nj=32
 debugmode=1
 dumpdir=dump   # directory to dump full features
@@ -58,6 +58,8 @@ bpemode=unigram
 
 # exp tag
 tag="" # tag for managing experiments.
+
+data_tag=
 
 . utils/parse_options.sh || exit 1;
 
@@ -232,7 +234,6 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
         --ngpu ${ngpu} \
         --config ${train_config} \
         --preprocess-conf ${preprocess_config} \
-        --ngpu ${ngpu} \
         --backend ${backend} \
         --outdir ${expdir}/results \
         --tensorboard-dir tensorboard/${expname} \
@@ -242,8 +243,9 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
         --minibatches ${N} \
         --verbose ${verbose} \
         --resume ${resume} \
-        --train-json ${feat_sp_dir}/data_${bpemode}${nbpe}.json \
-        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.json
+        --train-json ${feat_dt_dir}/data_${bpemode}${nbpe}.json${data_tag} \
+        --valid-json ${feat_dt_dir}/data_${bpemode}${nbpe}.json${data_tag}
+        #--train-json ${feat_sp_dir}/data_${bpemode}${nbpe}.json${data_tag} \
 fi
 
 if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
