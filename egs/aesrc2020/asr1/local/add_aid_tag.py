@@ -24,7 +24,7 @@ if __name__ == "__main__":
         cat = "<"+cat+">"
 
         data["utts"][uttid]["output"][0]["token"] = cat + " " + data["utts"][uttid]["output"][0]["token"]
-        aid_tokenid = str(data["utts"][uttid]["output"][0]["shape"][-1] + aid_tokens[cat]) 
+        aid_tokenid = str(data["utts"][uttid]["output"][0]["shape"][-1] + aid_tokens[cat] - 1)
         data["utts"][uttid]["output"][0]["tokenid"] = aid_tokenid + " " + data["utts"][uttid]["output"][0]["tokenid"]
         
         shape = data["utts"][uttid]["output"][0]["shape"]

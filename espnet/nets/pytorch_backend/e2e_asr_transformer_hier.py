@@ -32,7 +32,7 @@ from espnet.nets.pytorch_backend.transformer.attention import (
 from espnet.nets.pytorch_backend.transformer.decoder import Decoder
 from espnet.nets.pytorch_backend.transformer.dynamic_conv import DynamicConvolution
 from espnet.nets.pytorch_backend.transformer.dynamic_conv2d import DynamicConvolution2D
-from espnet.nets.pytorch_backend.transformer.encoder import Encoder
+from espnet.nets.pytorch_backend.transformer.encoder_hier import Encoder
 from espnet.nets.pytorch_backend.transformer.initializer import initialize
 from espnet.nets.pytorch_backend.transformer.label_smoothing_loss import (
     LabelSmoothingLoss,  # noqa: H301

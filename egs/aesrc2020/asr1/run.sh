@@ -226,6 +226,14 @@ if [ -z ${tag} ]; then
 else
     expname=${train_set}_${backend}_${tag}
 fi
+
+if [ ! -z ${data_tag} ]; then
+    expname=${expname}_$(echo ${data_tag} | tr -d '.')
+    if [ "${data_tag}" == *"aid"* ]; then
+        dict=${dict}.aid
+    fi
+fi
+
 if [[ "$nbpe" -eq 5000 ]]; then
     expname=${expname}
 else

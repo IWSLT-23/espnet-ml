@@ -310,29 +310,30 @@ class CustomConverter(object):
             self.ignore_id,
         ).to(device)
 
-        ys_int1_pad = pad_list(
-            [
-                torch.from_numpy(
-                    np.array(y[0][:]) if isinstance(y, tuple) else y
-                ).long()
-                for y in ys_int1
-            ],
-            self.ignore_id,
-        ).to(device)
-
-        ys_int2_pad = pad_list(
-            [
-                torch.from_numpy(
-                    np.array(y[0][:]) if isinstance(y, tuple) else y
-                ).long()
-                for y in ys_int2
-            ],
-            self.ignore_id,
-        ).to(device)
+        
 
         if len(batch[0]) == 2:
             return xs_pad, ilens, ys_pad
         elif len(batch[0]) == 4:
+            ys_int1_pad = pad_list(
+                [
+                    torch.from_numpy(
+                        np.array(y[0][:]) if isinstance(y, tuple) else y
+                    ).long()
+                    for y in ys_int1
+                ],
+                self.ignore_id,
+            ).to(device)
+
+            ys_int2_pad = pad_list(
+                [
+                    torch.from_numpy(
+                        np.array(y[0][:]) if isinstance(y, tuple) else y
+                    ).long()
+                    for y in ys_int2
+                ],
+                self.ignore_id,
+            ).to(device)
             return xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad
 
 
