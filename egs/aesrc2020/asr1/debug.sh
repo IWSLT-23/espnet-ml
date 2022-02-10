@@ -224,8 +224,18 @@ if [ -z ${tag} ]; then
 else
     expname=${train_set}_${backend}_${tag}
 fi
+
+if [ ! -z ${data_tag} ]; then
+    expname=${expname}_$(echo ${data_tag} | tr -d '.')
+    if [[ "${data_tag}" == *"aid"* ]]; then
+        dict=${dict}.aid
+    fi
+fi
+
 expdir=exp/${expname}
 mkdir -p ${expdir}
+echo $expdir
+echo $dict
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
     echo "stage 4: Network Training"
