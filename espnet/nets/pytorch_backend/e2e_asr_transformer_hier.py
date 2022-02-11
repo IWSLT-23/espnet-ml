@@ -181,7 +181,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # initialize parameters
         initialize(self, args.transformer_init)
 
-    def forward(self, xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad):
+    def forward(self, xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad=None):
         """E2E forward.
 
         :param torch.Tensor xs_pad: batch of padded source sequences (B, Tmax, idim)
@@ -194,7 +194,10 @@ class E2E(ASRInterface, torch.nn.Module):
         :return: accuracy in attention decoder
         :rtype: float
         """
-        ys_int_pad = [ys_int1_pad, ys_int2_pad]
+        if ys_int2_pad == None:
+            ys_int_pad = [ys_int1_pad]
+        else:
+            ys_int_pad = [ys_int1_pad, ys_int2_pad]
 
         # 1. forward encoder
         xs_pad = xs_pad[:, : max(ilens)]  # for data parallel
@@ -301,7 +304,7 @@ class E2E(ASRInterface, torch.nn.Module):
         """
         self.eval()
         x = torch.as_tensor(x).unsqueeze(0)
-        enc_output, _, _ = self.encoder(x, None, ctc_softmax=self.ctc.softmax if self.self_conditioning else None)
+        enc_output, _, _ = self.encoder(x, None, ctc_softmax=[m.softmax for m in self.inter_ctc] if self.self_conditioning else None)
         return enc_output.squeeze(0)
 
     def recognize(self, x, recog_args, char_list=None, rnnlm=None, use_jit=False):
@@ -524,7 +527,7 @@ class E2E(ASRInterface, torch.nn.Module):
         )
         return nbest_hyps
 
-    def calculate_all_attentions(self, xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad):
+    def calculate_all_attentions(self, xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad=None):
         """E2E attention calculation.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax, idim)
@@ -550,7 +553,7 @@ class E2E(ASRInterface, torch.nn.Module):
         self.train()
         return ret
 
-    def calculate_all_ctc_probs(self, xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad):
+    def calculate_all_ctc_probs(self, xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad=None):
         """E2E CTC probability calculation.
 
         :param torch.Tensor xs_pad: batch of padded input sequences (B, Tmax)
