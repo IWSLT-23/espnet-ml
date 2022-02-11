@@ -60,6 +60,7 @@ bpemode=unigram
 tag="" # tag for managing experiments.
 
 data_tag=
+tir=""
 
 . utils/parse_options.sh || exit 1;
 
@@ -245,6 +246,22 @@ echo $expdir
 echo $dict
 
 if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
+    echo "copying data to tmp"
+    if [ "$tir" == "1-28" ]; then
+        tempdir='/compute/tir-0-11/byan/aesrc'
+    else
+        tempdir=`mktemp -d /tmp/aesrc-XXXX`
+    fi
+    echo $tempdir
+    mkdir -p $tempdir
+    trap 'rm -rf ${tempdir}' EXIT
+    cp -r ${dumpdir}/${train_sp} ${tempdir}
+    cp -r ${dumpdir}/${train_dev} ${tempdir}
+    feat_sp_dir=${tempdir}/${train_sp}/delta${do_delta}
+    feat_dt_dir=${tempdir}/${train_dev}/delta${do_delta}
+    sed -i "s,/projects/tir4/users/byan/espnet-accent/egs/aesrc2020/asr1/dump,${tempdir},g" ${tempdir}/*/deltafalse/*.scp
+    sed -i "s,/projects/tir4/users/byan/espnet-accent/egs/aesrc2020/asr1/dump,${tempdir},g" ${tempdir}/*/deltafalse/*.json*
+
     echo "stage 4: Network Training"
     ${cuda_cmd} --gpu ${ngpu} ${expdir}/train.log \
         asr_train.py \
@@ -333,6 +350,9 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
             #--rnnlm ${lmexpdir}/${lang_model} \
 
         score_sclite.sh --bpe ${nbpe} --bpemodel ${bpemodel}.model --wer true ${expdir}/${decode_dir} ${dict}
+        if [[ "${data_tag}" == *"aid"* ]]; then
+            local/score_sclite.sh --bpe ${nbpe} --bpemodel ${bpemodel}.model --wer true ${expdir}/${decode_dir} ${dict}
+        fi
 
     ) &
     pids+=($!) # store background pids
@@ -341,3 +361,5 @@ if [ ${stage} -le 5 ] && [ ${stop_stage} -ge 5 ]; then
     [ ${i} -gt 0 ] && echo "$0: ${i} background jobs are failed." && false
     echo "Finished"
 fi
+
+rm -rf ${tempdir}
