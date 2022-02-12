@@ -280,7 +280,7 @@ def get_trained_model_state_dict(model_path, new_is_transducer):
     return model.state_dict()
 
 
-def load_trained_modules(idim, odim, args, interface=ASRInterface):
+def load_trained_modules(idim, odim, args, interface=ASRInterface, rename_keys={}):
     """Load ASR/MT/TTS model with pre-trained weights for specified modules.
 
     Args:
@@ -293,7 +293,6 @@ def load_trained_modules(idim, odim, args, interface=ASRInterface):
         main_model (torch.nn.Module): Model with pre-initialized weights.
 
     """
-
     def print_new_keys(state_dict, modules, model_path):
         logging.info(f"Loading {modules} from model: {model_path}")
 
@@ -322,6 +321,10 @@ def load_trained_modules(idim, odim, args, interface=ASRInterface):
                     model_path, "transducer" in args.model_module
                 )
                 modules = filter_modules(model_state_dict, modules)
+
+                for key in rename_keys:
+                    new_key = rename_keys[key]
+                    model_state_dict[new_key] = model_state_dict.pop(key)
 
                 partial_state_dict = get_partial_state_dict(model_state_dict, modules)
 

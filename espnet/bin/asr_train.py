@@ -384,6 +384,12 @@ def get_parser(parser=None, required=True):
         type=lambda s: [str(mod) for mod in s.split(",") if s != ""],
         help="List of modules to freeze, separated by a comma.",
     )
+    parser.add_argument(
+        "--rename-keys",
+        default=None,
+        type=lambda s: {k:v for k,v in [str(mod).split(":") for mod in s.split(",") if s != ""]},
+        help="List of modules to freeze, separated by a comma.",
+    )
     # front end related
     parser.add_argument(
         "--use-frontend",

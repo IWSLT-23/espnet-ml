@@ -269,6 +269,8 @@ class CustomConverter(object):
             xs, ys = batch[0]
         elif len(batch[0]) == 4:
             xs, ys, ys_int1, ys_int2 = batch[0]
+        elif len(batch[0]) == 3:
+            xs, ys, ys_int1 = batch[0]
         else:
             import pdb;pdb.set_trace()
 
@@ -335,7 +337,17 @@ class CustomConverter(object):
                 self.ignore_id,
             ).to(device)
             return xs_pad, ilens, ys_pad, ys_int1_pad, ys_int2_pad
-
+        elif len(batch[0]) == 3:
+            ys_int1_pad = pad_list(
+                [
+                    torch.from_numpy(
+                        np.array(y[0][:]) if isinstance(y, tuple) else y
+                    ).long()
+                    for y in ys_int1
+                ],
+                self.ignore_id,
+            ).to(device)
+            return xs_pad, ilens, ys_pad, ys_int1_pad, None
 
 class CustomConverterMulEnc(object):
     """Custom batch converter for Pytorch in multi-encoder case.
@@ -432,16 +444,14 @@ def train(args):
         for i in range(args.num_encs):
             logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
         logging.info("#output dims: " + str(odim))
-    elif len(valid_json[utts[0]]["output"]) == 3:
+    else:
         odim = [
             int(valid_json[utts[0]]["output"][i]["shape"][-1]) for i in range(len(valid_json[utts[0]]["output"]))
         ]
         for i in range(args.num_encs):
             logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
-        for i in range(3):
+        for i in range(len(valid_json[utts[0]]["output"])):
             logging.info("output{}: output dims : {}".format(i + 1, odim[i]))
-    else:
-        import pdb;pdb.set_trace()
 
     # specify attention, CTC, hybrid mode
     if "transducer" in args.model_module:
@@ -464,7 +474,7 @@ def train(args):
         logging.info("Multitask learning mode")
 
     if (args.enc_init is not None or args.dec_init is not None) and args.num_encs == 1:
-        model = load_trained_modules(idim_list[0], odim, args)
+        model = load_trained_modules(idim_list[0], odim, args, rename_keys=args.rename_keys)
     else:
         model_class = dynamic_import(args.model_module)
         model = model_class(
