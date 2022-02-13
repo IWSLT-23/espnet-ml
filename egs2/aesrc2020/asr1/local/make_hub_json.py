@@ -1,0 +1,1 @@
+/project/ocean/byan/espnet-accent/egs/aesrc2020/asr1/local/make_hub_json.py
