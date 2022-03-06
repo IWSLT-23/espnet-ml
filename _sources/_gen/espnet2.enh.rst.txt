@@ -180,6 +180,17 @@ espnet2.enh.separator.neural_beamformer
     :show-inheritance:
 
 
+.. _espnet2.enh.separator.dccrn_separator:
+
+espnet2.enh.separator.dccrn_separator
+-------------------------------------
+
+.. automodule:: espnet2.enh.separator.dccrn_separator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 .. _espnet2.enh.separator.transformer_separator:
 
 espnet2.enh.separator.transformer_separator
@@ -241,6 +252,17 @@ espnet2.enh.separator.rnn_separator
 -----------------------------------
 
 .. automodule:: espnet2.enh.separator.rnn_separator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. _espnet2.enh.separator.skim_separator:
+
+espnet2.enh.separator.skim_separator
+------------------------------------
+
+.. automodule:: espnet2.enh.separator.skim_separator
     :members:
     :undoc-members:
     :show-inheritance:
@@ -411,12 +433,34 @@ espnet2.enh.layers.dnn_beamformer
     :show-inheritance:
 
 
+.. _espnet2.enh.layers.skim:
+
+espnet2.enh.layers.skim
+-----------------------
+
+.. automodule:: espnet2.enh.layers.skim
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 .. _espnet2.enh.layers.tcn:
 
 espnet2.enh.layers.tcn
 ----------------------
 
 .. automodule:: espnet2.enh.layers.tcn
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+.. _espnet2.enh.layers.complexnn:
+
+espnet2.enh.layers.complexnn
+----------------------------
+
+.. automodule:: espnet2.enh.layers.complexnn
     :members:
     :undoc-members:
     :show-inheritance:

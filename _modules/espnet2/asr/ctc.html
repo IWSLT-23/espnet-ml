@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>espnet2.asr.ctc &mdash; ESPnet 0.10.6a1 documentation</title><link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <title>espnet2.asr.ctc &mdash; ESPnet 0.10.7a1 documentation</title><link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../../../_static/js/html5shiv.min.js"></script>
@@ -29,7 +29,7 @@
             <a href="../../../index.html" class="icon icon-home"> ESPnet
           </a>
               <div class="version">
-                0.10.6a1
+                0.10.7a1
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
@@ -78,6 +78,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet2.torch_utils.html">espnet2.torch_utils package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet2.utils.html">espnet2.utils package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet2.train.html">espnet2.train package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet2.mt.html">espnet2.mt package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet2.diar.html">espnet2.diar package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet2.schedulers.html">espnet2.schedulers package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet2.optimizers.html">espnet2.optimizers package</a></li>
@@ -137,7 +138,7 @@
 
 <span class="sd">    Args:</span>
 <span class="sd">        odim: dimension of outputs</span>
-<span class="sd">        encoder_output_sizse: number of encoder projection units</span>
+<span class="sd">        encoder_output_size: number of encoder projection units</span>
 <span class="sd">        dropout_rate: dropout rate (0.0 ~ 1.0)</span>
 <span class="sd">        ctc_type: builtin or warpctc</span>
 <span class="sd">        reduce: reduce the CTC loss into a scalar</span>
@@ -146,7 +147,7 @@
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">odim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-        <span class="n">encoder_output_sizse</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">encoder_output_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">dropout_rate</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
         <span class="n">ctc_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;builtin&quot;</span><span class="p">,</span>
         <span class="n">reduce</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -154,7 +155,7 @@
     <span class="p">):</span>
         <span class="k">assert</span> <span class="n">check_argument_types</span><span class="p">()</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="n">eprojs</span> <span class="o">=</span> <span class="n">encoder_output_sizse</span>
+        <span class="n">eprojs</span> <span class="o">=</span> <span class="n">encoder_output_size</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dropout_rate</span> <span class="o">=</span> <span class="n">dropout_rate</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ctc_lo</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">eprojs</span><span class="p">,</span> <span class="n">odim</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">ctc_type</span> <span class="o">=</span> <span class="n">ctc_type</span>
@@ -282,6 +283,16 @@
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">loss</span></div>
+
+<div class="viewcode-block" id="CTC.softmax"><a class="viewcode-back" href="../../../_gen/espnet2.asr.html#espnet2.asr.ctc.CTC.softmax">[docs]</a>    <span class="k">def</span> <span class="nf">softmax</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hs_pad</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;softmax of frame activations</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            Tensor hs_pad: 3d tensor (B, Tmax, eprojs)</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            torch.Tensor: softmax applied 3d tensor (B, Tmax, odim)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ctc_lo</span><span class="p">(</span><span class="n">hs_pad</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span></div>
 
 <div class="viewcode-block" id="CTC.log_softmax"><a class="viewcode-back" href="../../../_gen/espnet2.asr.html#espnet2.asr.ctc.CTC.log_softmax">[docs]</a>    <span class="k">def</span> <span class="nf">log_softmax</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hs_pad</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;log_softmax of frame activations</span>

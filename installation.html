@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Installation &mdash; ESPnet 0.10.6a1 documentation</title><link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <title>Installation &mdash; ESPnet 0.10.7a1 documentation</title><link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="_static/js/html5shiv.min.js"></script>
@@ -32,7 +32,7 @@
             <a href="index.html" class="icon icon-home"> ESPnet
           </a>
               <div class="version">
-                0.10.6a1
+                0.10.7a1
               </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
@@ -89,6 +89,7 @@
 <li class="toctree-l1"><a class="reference internal" href="_gen/espnet2.torch_utils.html">espnet2.torch_utils package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="_gen/espnet2.utils.html">espnet2.utils package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="_gen/espnet2.train.html">espnet2.train package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet2.mt.html">espnet2.mt package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="_gen/espnet2.diar.html">espnet2.diar package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="_gen/espnet2.schedulers.html">espnet2.schedulers package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="_gen/espnet2.optimizers.html">espnet2.optimizers package</a></li>
@@ -369,12 +370,12 @@ $ make
 <p>The Makefile tries to install ESPnet and all dependencies including PyTorch.
 You can also specify PyTorch version, for example:</p>
 <div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> &lt;espnet-root&gt;/tools
-$ make <span class="nv">TH_VERSION</span><span class="o">=</span><span class="m">1</span>.3.1
+$ make <span class="nv">TH_VERSION</span><span class="o">=</span><span class="m">1</span>.10.1
 </pre></div>
 </div>
 <p>Note that the CUDA version is derived from <code class="docutils literal notranslate"><span class="pre">nvcc</span></code> command. If you’d like to specify the other CUDA version, you need to give <code class="docutils literal notranslate"><span class="pre">CUDA_VERSION</span></code>.</p>
 <div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> &lt;espnet-root&gt;/tools
-$ make <span class="nv">TH_VERSION</span><span class="o">=</span><span class="m">1</span>.3.1 <span class="nv">CUDA_VERSION</span><span class="o">=</span><span class="m">10</span>.1
+$ make <span class="nv">TH_VERSION</span><span class="o">=</span><span class="m">1</span>.10.1 <span class="nv">CUDA_VERSION</span><span class="o">=</span><span class="m">11</span>.3
 </pre></div>
 </div>
 <p>If you don’t have <code class="docutils literal notranslate"><span class="pre">nvcc</span></code> command, packages are installed for CPU mode by default.
