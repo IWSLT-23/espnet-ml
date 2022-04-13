@@ -19,7 +19,7 @@ inference_config=conf/decode_asr.yaml
 if [ ! -f "data/train/token.man.2" ]; then
     # must preprocess data first to get Mandarin character tokens
     if [ ${stage} -eq 1 ]; then
-        ./asr.sh --stage 1 --stop_stage 1
+        ./asr.sh --stage 1 --stop_stage 1 --train_set "${train_set}" --valid_set "${valid_set}" --test_sets "${test_sets}"
         stage=2
     else
         echo "Error: data/train/token.man.2 does not exist! Run from stage=1 again."
@@ -35,7 +35,7 @@ nbpe=$((3000 + man_chars + 4))  # 5626
 # English BPE: 3000 / Mandarin: 2622 / other symbols: 4
 
 ./asr.sh \
-    --ngpu 2 \
+    --ngpu 1 \
     --stage ${stage} \
     --stop_stage ${stop_stage} \
     --nbpe ${nbpe} \
