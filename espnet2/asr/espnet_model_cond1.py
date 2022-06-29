@@ -236,8 +236,6 @@ class ESPnetASRModelCond1(AbsESPnetModel):
             stats["loss_ctc_zh"] = loss_ctc_zh.detach() if loss_ctc_zh is not None else None
             stats["cer_ctc_zh"] = cer_ctc_zh
 
-            import pdb; pdb.set_trace()
-
             if self.use_conditioning:
                 encoder_out = self.zh_conditioning_layer(self.zh_ctc.log_softmax(encoder_out)) + self.en_conditioning_layer(self.en_ctc.log_softmax(encoder_out))
 
