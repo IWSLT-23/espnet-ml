@@ -18,11 +18,11 @@ inference_config=conf/decode_asr.yaml
 
 
 ## Starts from tedlium_aishell prep and adds lid
-python local/add_lid.py --src dump/raw/train_tedlium_aishell_lid_sp/text
-python local/add_lid.py --src dump/raw/dev_tedlium_aishell_lid/text
+# python local/add_lid.py --src dump/raw/train_tedlium_aishell_lid_sp/text
+# python local/add_lid.py --src dump/raw/dev_tedlium_aishell_lid/text
 
 source data/tedlium_aishell_tokens.txt
-bpe_nlsyms="<en>,<zh>,"${bpe_nlsyms}
+bpe_nlsyms="▁<en>,▁<zh>,"${bpe_nlsyms}
 en_nbpe=1000
 nbpe=$((en_nbpe + man_nbpe + 2))
 

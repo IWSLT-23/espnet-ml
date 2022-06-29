@@ -183,7 +183,7 @@ class ConformerEncoder(AbsEncoder):
                 input_layer,
                 pos_enc_class(output_size, positional_dropout_rate),
             )
-        elif input_layer is None:
+        elif input_layer == "nothing":
             self.embed = torch.nn.Sequential(
                 pos_enc_class(output_size, positional_dropout_rate)
             )

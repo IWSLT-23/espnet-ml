@@ -6,6 +6,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
+from typing import Union
 
 import numpy as np
 import torch
@@ -41,6 +42,7 @@ from espnet2.asr.encoder.contextual_block_conformer_encoder import (
 from espnet2.asr.encoder.vgg_rnn_encoder import VGGRNNEncoder
 from espnet2.asr.encoder.wav2vec2_encoder import FairSeqWav2Vec2Encoder
 from espnet2.asr.espnet_model import ESPnetASRModel
+from espnet2.asr.espnet_model_cond1 import ESPnetASRModelCond1
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
 from espnet2.asr.frontend.fused import FusedFrontends
@@ -130,6 +132,22 @@ encoder_choices = ClassChoices(
     type_check=AbsEncoder,
     default="rnn",
 )
+encoder_hier_choices = ClassChoices(
+    "encoder_hier",
+    classes=dict(
+        conformer=ConformerEncoder,
+        transformer=TransformerEncoder,
+        contextual_block_transformer=ContextualBlockTransformerEncoder,
+        contextual_block_conformer=ContextualBlockConformerEncoder,
+        vgg_rnn=VGGRNNEncoder,
+        rnn=RNNEncoder,
+        wav2vec2=FairSeqWav2Vec2Encoder,
+        hubert=FairseqHubertEncoder,
+        hubert_pretrain=FairseqHubertPretrainEncoder,
+    ),
+    type_check=AbsEncoder,
+    default="rnn",
+)
 postencoder_choices = ClassChoices(
     name="postencoder",
     classes=dict(
@@ -175,6 +193,7 @@ class ASRTask(AbsTask):
         postencoder_choices,
         # --decoder and --decoder_conf
         decoder_choices,
+        encoder_hier_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -311,6 +330,31 @@ class ASRTask(AbsTask):
             default="13_15",
             help="The range of noise decibel level.",
         )
+        parser.add_argument(
+            "--zh_en_alpha",
+            type=float,
+            default=0.5,
+        )
+        parser.add_argument(
+            "--mono_alpha",
+            type=float,
+            default=0.7,
+        )
+        parser.add_argument(
+            "--vocab_range",
+            type=str,
+            default="4_4233_5233",
+        )
+        group.add_argument(
+            "--use_cond1",
+            type=str2bool,
+            default=True,
+        )
+        group.add_argument(
+            "--use_conditioning",
+            type=str2bool,
+            default=True,
+        )
 
         for class_choices in cls.class_choices_list:
             # Append --<name> and --<name>_conf.
@@ -383,7 +427,7 @@ class ASRTask(AbsTask):
         return retval
 
     @classmethod
-    def build_model(cls, args: argparse.Namespace) -> ESPnetASRModel:
+    def build_model(cls, args: argparse.Namespace) -> Union[ESPnetASRModel, ESPnetASRModelCond1]:
         assert check_argument_types()
         if isinstance(args.token_list, str):
             with open(args.token_list, encoding="utf-8") as f:
@@ -480,21 +524,54 @@ class ASRTask(AbsTask):
             odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
         )
 
-        # 8. Build model
-        model = ESPnetASRModel(
-            vocab_size=vocab_size,
-            frontend=frontend,
-            specaug=specaug,
-            normalize=normalize,
-            preencoder=preencoder,
-            encoder=encoder,
-            postencoder=postencoder,
-            decoder=decoder,
-            ctc=ctc,
-            joint_network=joint_network,
-            token_list=token_list,
-            **args.model_conf,
-        )
+        use_cond1 = getattr(args, "use_cond1", False)
+        if use_cond1:
+            # 4. Encoder Hier
+            encoder_hier_class = encoder_choices.get_class(args.encoder)
+            encoder_hier = encoder_hier_class(input_size=encoder_output_size, **args.encoder_hier_conf)
+
+            # 6. Monolingual CTC
+            en_ctc = CTC(
+                odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
+            )
+            zh_ctc = CTC(
+                odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
+            )
+
+            # 8. Build model
+            model = ESPnetASRModelCond1(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                encoder_hier=encoder_hier,
+                postencoder=postencoder,
+                decoder=decoder,
+                ctc=ctc,
+                en_ctc=en_ctc,
+                zh_ctc=zh_ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                **args.model_conf,
+            )
+        else:
+            # 8. Build model
+            model = ESPnetASRModel(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder=encoder,
+                postencoder=postencoder,
+                decoder=decoder,
+                ctc=ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                **args.model_conf,
+            )
 
         # FIXME(kamo): Should be done in model?
         # 9. Initialize
