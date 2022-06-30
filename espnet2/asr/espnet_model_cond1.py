@@ -220,7 +220,7 @@ class ESPnetASRModelCond1(AbsESPnetModel):
         # mono ctc losses
         loss_ctc_en, cer_ctc_en, loss_ctc_zh, cer_ctc_zh = None, None, None, None
         if self.mono_alpha != 0.0:
-            text_en = text.masked_fill(~((text >= self.vocab_range[0]) | (text <= self.vocab_range[1])), 3)
+            text_en = text.masked_fill(~((text >= self.vocab_range[0]) | (text <= self.vocab_range[1])), self.sos)
             loss_ctc_en, cer_ctc_en = self._calc_ctc_loss_en(
                 encoder_out, encoder_out_lens, text_en, text_lengths
             )
@@ -228,7 +228,7 @@ class ESPnetASRModelCond1(AbsESPnetModel):
             stats["loss_ctc_en"] = loss_ctc_en.detach() if loss_ctc_en is not None else None
             stats["cer_ctc_en"] = cer_ctc_en
 
-            text_zh = text.masked_fill(~((text > self.vocab_range[1]) | (text <= self.vocab_range[2])), 2)
+            text_zh = text.masked_fill(~((text > self.vocab_range[1]) | (text <= self.vocab_range[2])), self.sos)
             loss_ctc_zh, cer_ctc_zh = self._calc_ctc_loss_zh(
                 encoder_out, encoder_out_lens, text_zh, text_lengths
             )
