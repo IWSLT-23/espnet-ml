@@ -1,8 +1,8 @@
 # This configuration requires 2 GPUs with 32GB memory and 2 days for training
 batch_type: numel
-batch_bins: 2500000
+batch_bins: 7500000
 
-accum_grad: 12
+accum_grad: 4
 grad_clip: 5
 max_epoch: 50
 patience: none
@@ -18,7 +18,7 @@ encoder_conf:
     output_size: 256
     attention_heads: 4
     linear_units: 2048
-    num_blocks: 12
+    num_blocks: 8
     dropout_rate: 0.1
     positional_dropout_rate: 0.1
     attention_dropout_rate: 0.0
@@ -36,7 +36,7 @@ encoder_hier_conf:
     output_size: 256
     attention_heads: 4
     linear_units: 2048
-    num_blocks: 6
+    num_blocks: 4
     dropout_rate: 0.1
     positional_dropout_rate: 0.1
     attention_dropout_rate: 0.0
@@ -60,7 +60,7 @@ decoder_conf:
     src_attention_dropout_rate: 0.0
 
 model_conf:
-    ctc_weight: 1.0
+    ctc_weight: 0.3
     lsm_weight: 0.1
     length_normalized_loss: false
     zh_en_alpha: 0.5
@@ -68,7 +68,7 @@ model_conf:
 
 optim: adam
 optim_conf:
-    lr: 0.001
+    lr: 0.0005
 scheduler: warmuplr
 scheduler_conf:
     warmup_steps: 25000
@@ -90,3 +90,10 @@ specaug_conf:
     num_time_mask: 2
 
 use_cond1: true
+use_conditioning: true
+vocab_range: "5_4337_8334"
+
+frontend_conf:
+    n_fft: 512                                                                                                                                                                                            
+    win_length: 400 
+    hop_length: 160
