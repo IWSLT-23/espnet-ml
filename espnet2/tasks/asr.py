@@ -348,7 +348,7 @@ class ASRTask(AbsTask):
         group.add_argument(
             "--use_cond1",
             type=str2bool,
-            default=True,
+            default=False,
         )
         group.add_argument(
             "--use_conditioning",
