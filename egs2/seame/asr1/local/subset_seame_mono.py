@@ -22,7 +22,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    lines = [x.strip().split(" ", 1) for x in open(args.src+"/text_lid", "r").readlines()]
+    lines = [x.strip().split(" ", 1) for x in open(args.src+"/text", "r").readlines()]
     new_lines = [id + ' ' + txt + "\n" for id, txt in lines if is_mono(txt)]
     mono_ids = [x.split(" ")[0] for x in new_lines]
     

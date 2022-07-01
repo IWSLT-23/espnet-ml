@@ -20,7 +20,7 @@ def add_lid(id, txt):
     prev = ""
     for i, c in enumerate(txt.split()):
         curr = lid(c)
-        if curr != prev:
+        if c != "<noise>" and curr != prev:
             new_txt.append(curr)
             prev = curr
         new_txt.append(c)
