@@ -43,6 +43,7 @@ from espnet2.asr.encoder.vgg_rnn_encoder import VGGRNNEncoder
 from espnet2.asr.encoder.wav2vec2_encoder import FairSeqWav2Vec2Encoder
 from espnet2.asr.espnet_model import ESPnetASRModel
 from espnet2.asr.espnet_model_cond1 import ESPnetASRModelCond1
+from espnet2.asr.espnet_model_cond2 import ESPnetASRModelCond2
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
 from espnet2.asr.frontend.fused import FusedFrontends
@@ -351,6 +352,11 @@ class ASRTask(AbsTask):
             default=False,
         )
         group.add_argument(
+            "--use_cond2",
+            type=str2bool,
+            default=False,
+        )
+        group.add_argument(
             "--use_conditioning",
             type=str2bool,
             default=True,
@@ -427,7 +433,7 @@ class ASRTask(AbsTask):
         return retval
 
     @classmethod
-    def build_model(cls, args: argparse.Namespace) -> Union[ESPnetASRModel, ESPnetASRModelCond1]:
+    def build_model(cls, args: argparse.Namespace) -> Union[ESPnetASRModel, ESPnetASRModelCond1, ESPnetASRModelCond2]:
         assert check_argument_types()
         if isinstance(args.token_list, str):
             with open(args.token_list, encoding="utf-8") as f:
@@ -525,9 +531,11 @@ class ASRTask(AbsTask):
         )
 
         use_cond1 = getattr(args, "use_cond1", False)
+        use_cond2 = getattr(args, "use_cond2", False)
+        use_conditioning = getattr(args, "use_conditioning", False)
         if use_cond1:
             # 4. Encoder Hier
-            encoder_hier_class = encoder_choices.get_class(args.encoder)
+            encoder_hier_class = encoder_hier_choices.get_class(args.encoder_hier)
             encoder_hier = encoder_hier_class(input_size=encoder_output_size, **args.encoder_hier_conf)
 
             # 6. Monolingual CTC
@@ -554,6 +562,39 @@ class ASRTask(AbsTask):
                 zh_ctc=zh_ctc,
                 joint_network=joint_network,
                 token_list=token_list,
+                **args.model_conf,
+            )
+        elif use_cond2:
+            # 4. Encoder en/zh
+            encoder_en_class = encoder_choices.get_class(args.encoder)
+            encoder_en = encoder_class(input_size=input_size, **args.encoder_conf)
+            encoder_zh_class = encoder_choices.get_class(args.encoder)
+            encoder_zh = encoder_class(input_size=input_size, **args.encoder_conf)
+
+            # 6. Monolingual CTC
+            en_ctc = CTC(
+                odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
+            )
+            zh_ctc = CTC(
+                odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
+            )
+
+            # 8. Build model
+            model = ESPnetASRModelCond2(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder_en=encoder_en,
+                encoder_zh=encoder_zh,
+                postencoder=postencoder,
+                decoder=decoder,
+                en_ctc=en_ctc,
+                zh_ctc=zh_ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                use_conditioning=use_conditioning,
                 **args.model_conf,
             )
         else:

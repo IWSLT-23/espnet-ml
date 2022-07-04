@@ -1106,12 +1106,14 @@ if ! "${skip_train}"; then
                 --valid_shape_file "${asr_stats_dir}/valid/speech_shape" \
                 --valid_shape_file "${asr_stats_dir}/valid/text_shape.${token_type}" \
                 --resume true \
-                --init_param ${pretrained_model} \
-                --ignore_init_mismatch ${ignore_init_mismatch} \
                 --fold_length "${_fold_length}" \
                 --fold_length "${asr_text_fold_length}" \
                 --output_dir "${asr_exp}" \
                 ${_opts} ${asr_args}
+
+                # --init_param ${pretrained_model} \
+                # --ignore_init_mismatch ${ignore_init_mismatch} \
+
 
     fi
 else

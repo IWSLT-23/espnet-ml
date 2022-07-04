@@ -9,7 +9,8 @@ stage=1
 stop_stage=13
 
 train_set="train_mseame_tedlium_aishell"
-valid_set="valid"
+# valid_set="valid"
+valid_set="dev_tedlium_aishell_lid"
 test_sets="devman devsge"
 
 asr_config=conf/tuning/train_asr_conformer.yaml

@@ -15,7 +15,13 @@ def lid(c):
     else:
         return "<zh>"
 
-def add_lid(id, txt):
+def add_lid(x):
+    if len(x) == 1:
+        id = x[0]
+        txt = ""
+    else:
+        id = x[0]
+        txt = x[1]
     new_txt = []
     prev = ""
     for i, c in enumerate(txt.split()):
@@ -35,7 +41,7 @@ if __name__ == "__main__":
 
 
     lines = [x.strip().split(" ", 1) for x in open(args.src, "r").readlines()]
-    new_lines = [add_lid(id, txt) for id, txt in lines]
+    new_lines = [add_lid(x) for x in lines]
     
     with open(args.src + "_lid", "w") as f:
         f.writelines(new_lines)
