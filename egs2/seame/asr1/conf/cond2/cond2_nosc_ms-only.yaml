@@ -1,8 +1,8 @@
 # This configuration requires 2 GPUs with 32GB memory and 2 days for training
 batch_type: numel
-batch_bins: 2500000
+batch_bins: 7500000
 
-accum_grad: 12
+accum_grad: 4
 grad_clip: 5
 max_epoch: 50
 patience: none
@@ -31,16 +31,15 @@ encoder_conf:
     use_cnn_module: true
     cnn_module_kernel: 15
 
-decoder: transducer
+decoder: transformer
 decoder_conf:
-    rnn_type: lstm
-    num_layers: 1
-    hidden_size: 512
-    dropout: 0.1
-    dropout_embed: 0.1
-
-joint_net_conf:
-    joint_space_size: 640
+    attention_heads: 4
+    linear_units: 2048
+    num_blocks: 6
+    dropout_rate: 0.1
+    positional_dropout_rate: 0.1
+    self_attention_dropout_rate: 0.0
+    src_attention_dropout_rate: 0.0
 
 model_conf:
     ctc_weight: 0.3

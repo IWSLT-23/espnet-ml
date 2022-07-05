@@ -595,6 +595,7 @@ class ASRTask(AbsTask):
                 joint_network=joint_network,
                 token_list=token_list,
                 use_conditioning=use_conditioning,
+                vocab_range=args.vocab_range,
                 **args.model_conf,
             )
         else:
