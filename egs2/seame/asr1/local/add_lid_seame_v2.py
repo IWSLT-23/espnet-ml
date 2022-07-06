@@ -12,6 +12,8 @@ num = ["0","1","2","3","4","5","6","7","8","9"]
 eng_set = alph + alph_lower + num
 
 def lid(c):
+    if len(c) == 0:
+        return ""
     if c[0] in eng_set:
         return "<en>"
     else:
