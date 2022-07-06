@@ -34,6 +34,7 @@ nbpe=$((en_nbpe + man_nbpe + 2))
 lang="mseame_tedlium_aishell_lid"
 
 ./asr.sh \
+    --use_lm false \
     --lang ${lang} \
     --bpe_train_text dump/raw/train_mseame_tedlium_aishell_sp/text \
     --ngpu 1 \
@@ -44,7 +45,6 @@ lang="mseame_tedlium_aishell_lid"
     --speed_perturb_factors "0.9 1.0 1.1" \
     --max_wav_duration 30 \
     --asr_config "${asr_config}" \
-    --lm_config "${lm_config}" \
     --inference_config "${inference_config}" \
     --train_set "${train_set}" \
     --valid_set "${valid_set}" \
@@ -53,6 +53,6 @@ lang="mseame_tedlium_aishell_lid"
     --asr_stats_dir "exp/asr_stats_nbpe${nbpe}_ms+t+a_lid" \
     "$@"
 
-
+    # --lm_config "${lm_config}" \
     # --lm_train_text "data/${train_set}/text" \
     # --bpe_train_text "data/${train_set}/text.eng.bpe" \

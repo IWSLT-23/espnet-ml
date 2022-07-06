@@ -372,6 +372,41 @@ class ESPnetASRModelCond2(AbsESPnetModel):
             feats, feats_lengths = speech, speech_lengths
         return {"feats": feats, "feats_lengths": feats_lengths}
 
+    def encode(
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Frontend + Encoder. Note that this method is used by asr_inference.py
+
+        Args:
+            speech: (Batch, Length, ...)
+            speech_lengths: (Batch, )
+        """
+        # 1. Encoder
+        # encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
+        with autocast(False):
+            # 1. Extract feats
+            feats, feats_lengths = self._extract_feats(speech, speech_lengths)
+
+            # 2. Data augmentation
+            if self.specaug is not None and self.training:
+                feats, feats_lengths = self.specaug(feats, feats_lengths)
+
+            # 3. Normalization for feature: e.g. Global-CMVN, Utterance-CMVN
+            if self.normalize is not None:
+                feats, feats_lengths = self.normalize(feats, feats_lengths)
+
+        encoder_en_out, encoder_en_out_lens, _ = self.encoder_en(feats, feats_lengths)
+        encoder_zh_out, encoder_zh_out_lens, _ = self.encoder_zh(feats, feats_lengths)
+
+        if self.use_conditioning:
+            encoder_out = self.zh_conditioning_layer(self.zh_ctc.log_softmax(encoder_zh_out)) + \
+            self.en_conditioning_layer(self.en_ctc.log_softmax(encoder_en_out))
+        else:
+            encoder_out = encoder_en_out + encoder_zh_out
+        encoder_out_lens = encoder_en_out_lens
+
+        return encoder_out, encoder_out_lens
+
     # def encode(
     #     self, speech: torch.Tensor, speech_lengths: torch.Tensor
     # ) -> Tuple[torch.Tensor, torch.Tensor]:
