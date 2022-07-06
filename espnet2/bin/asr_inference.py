@@ -89,13 +89,19 @@ class Speech2Text:
 
         decoder = asr_model.decoder
 
-        ctc = CTCPrefixScorer(ctc=asr_model.ctc, eos=asr_model.eos)
         token_list = asr_model.token_list
-        scorers.update(
-            decoder=decoder,
-            ctc=ctc,
-            length_bonus=LengthBonus(len(token_list)),
-        )
+        if hasattr(asr_model, "ctc"):
+            ctc = CTCPrefixScorer(ctc=asr_model.ctc, eos=asr_model.eos)
+            scorers.update(
+                decoder=decoder,
+                ctc=ctc,
+                length_bonus=LengthBonus(len(token_list)),
+            )
+        else:
+            scorers.update(
+                decoder=decoder,
+                length_bonus=LengthBonus(len(token_list)),
+            )
 
         # 2. Build Language model
         if lm_train_config is not None:
