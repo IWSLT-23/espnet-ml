@@ -9,8 +9,8 @@ patience: none
 init: xavier_uniform
 best_model_criterion:
 -   - valid
-    - acc
-    - max
+    - loss
+    - min
 keep_nbest_models: 10
 
 encoder: conformer

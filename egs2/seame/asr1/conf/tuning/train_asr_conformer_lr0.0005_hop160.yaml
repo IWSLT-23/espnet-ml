@@ -1,4 +1,9 @@
 # This configuration requires 2 GPUs with 32GB memory and 2 days for training
+frontend_conf:
+    n_fft: 512
+    win_length: 400 
+    hop_length: 160
+
 batch_type: numel
 batch_bins: 7500000
 
@@ -45,7 +50,6 @@ model_conf:
     ctc_weight: 0.3
     lsm_weight: 0.1
     length_normalized_loss: false
-    zh_en_alpha: 0.5
 
 optim: adam
 optim_conf:
@@ -69,17 +73,3 @@ specaug_conf:
     - 0
     - 40
     num_time_mask: 2
-
-use_cond2: true
-use_conditioning: true
-vocab_range: "5_4337_8334"
-
-frontend_conf:
-    n_fft: 512                                                                                                                                                                                            
-    win_length: 400 
-    hop_length: 160
-
-ignore_init_mismatch: true
-init_param:
-    - "/ocean/projects/cis210027p/byan/espnet-cs/egs2/tedlium2/asr1/exp/asr_train_asr_conformer_lr0.0005_raw_en_bpe500_sp/valid.acc.ave_10best.pth:encoder:encoder_en"
-    - "/ocean/projects/cis210027p/byan/espnet-cs/egs2/aishell/asr1/exp/asr_train_asr_conformer_raw_zh_char_sp/valid.acc.ave_10best.pth:encoder:encoder_zh"
