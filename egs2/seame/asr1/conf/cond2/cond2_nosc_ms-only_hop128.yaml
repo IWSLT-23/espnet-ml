@@ -4,7 +4,7 @@ batch_bins: 7500000
 
 accum_grad: 4
 grad_clip: 5
-max_epoch: 100
+max_epoch: 50
 patience: none
 init: xavier_uniform
 best_model_criterion:
@@ -45,10 +45,11 @@ model_conf:
     ctc_weight: 0.3
     lsm_weight: 0.1
     length_normalized_loss: false
+    zh_en_alpha: 0.5
 
 optim: adam
 optim_conf:
-    lr: 0.0001
+    lr: 0.0005
 scheduler: warmuplr
 scheduler_conf:
     warmup_steps: 25000
@@ -68,3 +69,12 @@ specaug_conf:
     - 0
     - 40
     num_time_mask: 2
+
+use_cond2: true
+use_conditioning: false
+vocab_range: "5_4337_8334"
+
+ignore_init_mismatch: true
+init_param:
+    - "/home/byan/espnet-cs/egs2/tedlium2/asr1/exp/asr_train_asr_conformer_lr0.0005_raw_en_bpe500_sp/valid.acc.ave_10best.pth:encoder:encoder_en"
+    - "/home/byan/espnet-cs/egs2/aishell/asr1/exp/asr_train_asr_conformer_raw_zh_char_sp/valid.acc.ave_10best.pth:encoder:encoder_zh"
