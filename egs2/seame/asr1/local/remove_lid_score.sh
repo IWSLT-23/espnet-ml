@@ -8,7 +8,7 @@ sed -i 's,<en> ,,g' "${hyp}.nolid"
 sed -i 's,<zh> ,,g' "${hyp}.nolid"
 
 sclite \
-    -r "${hyp}.nolid" trn \
-    -h "${ref}" trn \
+    -r "${ref}" trn \
+    -h "${hyp}.nolid" trn \
     -i rm -o dtl stdout > ${dir}/result.nolid.txt
 grep "Percent Total Error" ${dir}/result.nolid.txt
