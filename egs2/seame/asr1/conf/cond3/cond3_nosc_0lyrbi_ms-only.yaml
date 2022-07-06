@@ -72,5 +72,5 @@ frontend_conf:
 
 ignore_init_mismatch: true
 init_param:
-    - "/home/byan/espnet-cs/egs2/tedlium2/asr1/exp/asr_train_asr_conformer_lr0.0005_raw_en_bpe500_sp/valid.acc.ave_10best.pth:encoder:encoder_en"
-    - "/home/byan/espnet-cs/egs2/aishell/asr1/exp/asr_train_asr_conformer_raw_zh_char_sp/valid.acc.ave_10best.pth:encoder:encoder_zh"
+    - "/exp/byan/espnet-cs/egs2/tedlium2/asr1/exp/asr_train_asr_conformer_lr0.0005_raw_en_bpe500_sp/valid.acc.ave_10best.pth:encoder:encoder_en"
+    - "/exp/byan/espnet-cs/egs2/aishell/asr1/exp/asr_train_asr_conformer_raw_zh_char_sp/valid.acc.ave_10best.pth:encoder:encoder_zh"

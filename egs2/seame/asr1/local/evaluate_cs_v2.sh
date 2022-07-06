@@ -1,21 +1,20 @@
+#espnet version
+
 dir=$1
-hyp=$1/hyp.trn
+hyp=$1/hyp.trn.nolid
 ref=$1/ref.trn
 
 # remove trailing tab separated id
-cut -d'\t' -f1 ${hyp}
+cut -d$'\t' -f1 ${hyp} > "${hyp}.noid"
+cut -d$'\t' -f1 ${ref} > "${ref}.noid"
+hyp="${hyp}.noid"
+ref="${ref}.noid"
 
 # if no lid
-# python local/add_lid_seame.py --src $hyp
-python local/add_lid_seame.py --src $ref
-# hyp="${hyp}_lid"
+python local/add_lid_seame_v2.py --src $hyp
+python local/add_lid_seame_v2.py --src $ref
+hyp="${hyp}_lid"
 ref="${ref}_lid"
-
-# # if the utts have leading ids
-# cut -d' ' -f2- $hyp > "${hyp}_noid"
-# cut -d' ' -f2- $ref > "${ref}_noid"
-# hyp="${hyp}_noid"
-# ref="${ref}_noid"
 
 # masked transcripts: mono en, mono zh, lid only
 # also adds an id back to end w/ tab separation, for compatibility w sclite cmd
