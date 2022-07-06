@@ -26,8 +26,10 @@ def get_masks(txt):
             continue
         elif lid(c) == "<en>":
             en_only.append(c)
+            zh_only.append("<en>")
         elif c != "<noise>":
             zh_only.append(c)
+            en_only.append("<zh>")
         all_nolid.append(c)
     return " ".join(en_only), " ".join(zh_only), " ".join(lid_only), " ".join(all_nolid)
         
