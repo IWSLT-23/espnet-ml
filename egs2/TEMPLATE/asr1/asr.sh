@@ -1367,6 +1367,8 @@ if ! "${skip_eval}"; then
 
                 log "Write ${_type} result in ${_scoredir}/result.txt"
                 grep -e Avg -e SPKR -m 2 "${_scoredir}/result.txt"
+
+            . ./local/remove_lid_score.sh ${_scoredir}
             done
         done
 
