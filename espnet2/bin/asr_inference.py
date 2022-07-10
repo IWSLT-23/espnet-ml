@@ -41,6 +41,8 @@ from espnet2.utils.types import str2bool
 from espnet2.utils.types import str2triple_str
 from espnet2.utils.types import str_or_none
 
+from espnet.nets.pytorch_backend.time_sync import TimeSyncBeamSearch
+
 
 class Speech2Text:
     """Speech2Text class
@@ -77,6 +79,8 @@ class Speech2Text:
         penalty: float = 0.0,
         nbest: int = 1,
         streaming: bool = False,
+        time_synchronous: bool = False,
+        force_lid: bool = False,
     ):
         assert check_argument_types()
 
@@ -87,7 +91,10 @@ class Speech2Text:
         )
         asr_model.to(dtype=getattr(torch, dtype)).eval()
 
-        decoder = asr_model.decoder
+        if hasattr(asr_model, "decoder"):
+            decoder = asr_model.decoder
+        else:
+            decoder = None
 
         token_list = asr_model.token_list
         if hasattr(asr_model, "ctc"):
@@ -104,6 +111,7 @@ class Speech2Text:
             )
 
         # 2. Build Language model
+        # import pdb;pdb.set_trace()
         if lm_train_config is not None:
             lm, lm_train_args = LMTask.build_model_from_file(
                 lm_train_config, lm_file, device
@@ -144,39 +152,51 @@ class Speech2Text:
                 lm=lm_weight,
                 length_bonus=penalty,
             )
-            beam_search = BeamSearch(
-                beam_size=beam_size,
-                weights=weights,
-                scorers=scorers,
-                sos=asr_model.sos,
-                eos=asr_model.eos,
-                vocab_size=len(token_list),
-                token_list=token_list,
-                pre_beam_score_key=None if ctc_weight == 1.0 else "full",
-            )
 
-            # TODO(karita): make all scorers batchfied
-            if batch_size == 1:
-                non_batch = [
-                    k
-                    for k, v in beam_search.full_scorers.items()
-                    if not isinstance(v, BatchScorerInterface)
-                ]
-                if len(non_batch) == 0:
-                    if streaming:
-                        beam_search.__class__ = BatchBeamSearchOnlineSim
-                        beam_search.set_streaming_config(asr_train_config)
-                        logging.info(
-                            "BatchBeamSearchOnlineSim implementation is selected."
-                        )
+            if time_synchronous:
+                beam_search = TimeSyncBeamSearch(
+                    beam_size=beam_size,
+                    ctc=asr_model.ctc,
+                    sos=asr_model.sos,
+                    decoder=lm.lm,
+                    ctc_weight=ctc_weight,
+                    penalty=penalty,
+                    force_lid=force_lid
+                )
+            else:
+                beam_search = BeamSearch(
+                    beam_size=beam_size,
+                    weights=weights,
+                    scorers=scorers,
+                    sos=asr_model.sos,
+                    eos=asr_model.eos,
+                    vocab_size=len(token_list),
+                    token_list=token_list,
+                    pre_beam_score_key=None if ctc_weight == 1.0 else "full",
+                )
+
+                # TODO(karita): make all scorers batchfied
+                if batch_size == 1:
+                    non_batch = [
+                        k
+                        for k, v in beam_search.full_scorers.items()
+                        if not isinstance(v, BatchScorerInterface)
+                    ]
+                    if len(non_batch) == 0:
+                        if streaming:
+                            beam_search.__class__ = BatchBeamSearchOnlineSim
+                            beam_search.set_streaming_config(asr_train_config)
+                            logging.info(
+                                "BatchBeamSearchOnlineSim implementation is selected."
+                            )
+                        else:
+                            beam_search.__class__ = BatchBeamSearch
+                            logging.info("BatchBeamSearch implementation is selected.")
                     else:
-                        beam_search.__class__ = BatchBeamSearch
-                        logging.info("BatchBeamSearch implementation is selected.")
-                else:
-                    logging.warning(
-                        f"As non-batch scorers {non_batch} are found, "
-                        f"fall back to non-batch implementation."
-                    )
+                        logging.warning(
+                            f"As non-batch scorers {non_batch} are found, "
+                            f"fall back to non-batch implementation."
+                        )
 
             beam_search.to(device=device, dtype=getattr(torch, dtype)).eval()
             for scorer in scorers.values():
@@ -185,23 +205,23 @@ class Speech2Text:
             logging.info(f"Beam_search: {beam_search}")
             logging.info(f"Decoding device={device}, dtype={dtype}")
 
-        # 5. [Optional] Build Text converter: e.g. bpe-sym -> Text
-        if token_type is None:
-            token_type = asr_train_args.token_type
-        if bpemodel is None:
-            bpemodel = asr_train_args.bpemodel
+            # 5. [Optional] Build Text converter: e.g. bpe-sym -> Text
+            if token_type is None:
+                token_type = asr_train_args.token_type
+            if bpemodel is None:
+                bpemodel = asr_train_args.bpemodel
 
-        if token_type is None:
-            tokenizer = None
-        elif token_type == "bpe":
-            if bpemodel is not None:
-                tokenizer = build_tokenizer(token_type=token_type, bpemodel=bpemodel)
-            else:
+            if token_type is None:
                 tokenizer = None
-        else:
-            tokenizer = build_tokenizer(token_type=token_type)
-        converter = TokenIDConverter(token_list=token_list)
-        logging.info(f"Text tokenizer: {tokenizer}")
+            elif token_type == "bpe":
+                if bpemodel is not None:
+                    tokenizer = build_tokenizer(token_type=token_type, bpemodel=bpemodel)
+                else:
+                    tokenizer = None
+            else:
+                tokenizer = build_tokenizer(token_type=token_type)
+            converter = TokenIDConverter(token_list=token_list)
+            logging.info(f"Text tokenizer: {tokenizer}")
 
         self.asr_model = asr_model
         self.asr_train_args = asr_train_args
@@ -214,6 +234,7 @@ class Speech2Text:
         self.device = device
         self.dtype = dtype
         self.nbest = nbest
+        self.time_synchronous = time_synchronous
 
     @torch.no_grad()
     def __call__(
@@ -259,9 +280,12 @@ class Speech2Text:
         if self.beam_search_transducer:
             nbest_hyps = self.beam_search_transducer(enc[0])
         else:
-            nbest_hyps = self.beam_search(
-                x=enc[0], maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
-            )
+            if self.time_synchronous:
+                nbest_hyps = self.beam_search.search(enc_output=enc)
+            else:
+                nbest_hyps = self.beam_search(
+                    x=enc[0], maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
+                )
 
         nbest_hyps = nbest_hyps[: self.nbest]
 
@@ -353,6 +377,8 @@ def inference(
     allow_variable_data_keys: bool,
     transducer_conf: Optional[dict],
     streaming: bool,
+    time_synchronous: bool,
+    force_lid: bool,
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -396,6 +422,8 @@ def inference(
         penalty=penalty,
         nbest=nbest,
         streaming=streaming,
+        time_synchronous=time_synchronous,
+        force_lid=force_lid,
     )
     speech2text = Speech2Text.from_pretrained(
         model_tag=model_tag,
@@ -596,6 +624,18 @@ def get_parser():
         default=None,
         help="The model path of sentencepiece. "
         "If not given, refers from the training args",
+    )
+    group.add_argument(
+        "--time_synchronous",
+        type=str2bool,
+        default=False,
+        help="Use time sync",
+    )
+    group.add_argument(
+        "--force_lid",
+        type=str2bool,
+        default=False,
+        help="Use time sync",
     )
 
     return parser

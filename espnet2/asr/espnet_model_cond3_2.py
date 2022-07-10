@@ -38,7 +38,7 @@ else:
         yield
 
 
-class ESPnetASRModelCond3(AbsESPnetModel):
+class ESPnetASRModelCond3_2(AbsESPnetModel):
     """CTC-attention hybrid Encoder-Decoder model"""
 
     def __init__(
@@ -119,54 +119,54 @@ class ESPnetASRModelCond3(AbsESPnetModel):
         #         vocab_size, self.encoder.output_size()
         #     )
 
-        self.use_transducer_decoder = False
+        self.use_transducer_decoder = joint_network is not None
 
         # self.error_calculator = None
 
-        # if self.use_transducer_decoder:
-        #     from warprnnt_pytorch import RNNTLoss
+        if self.use_transducer_decoder:
+            from warprnnt_pytorch import RNNTLoss
 
-        #     self.decoder = decoder
-        #     self.joint_network = joint_network
+            self.decoder = decoder
+            self.joint_network = joint_network
 
-        #     self.criterion_transducer = RNNTLoss(
-        #         blank=self.blank_id,
-        #         fastemit_lambda=0.0,
-        #     )
+            self.criterion_transducer = RNNTLoss(
+                blank=self.blank_id,
+                fastemit_lambda=0.0,
+            )
 
-        #     if report_cer or report_wer:
-        #         self.error_calculator_trans = ErrorCalculatorTransducer(
-        #             decoder,
-        #             joint_network,
-        #             token_list,
-        #             sym_space,
-        #             sym_blank,
-        #             report_cer=report_cer,
-        #             report_wer=report_wer,
-        #         )
-        #     else:
-        #         self.error_calculator_trans = None
+            if report_cer or report_wer:
+                self.error_calculator_trans = ErrorCalculatorTransducer(
+                    decoder,
+                    joint_network,
+                    token_list,
+                    sym_space,
+                    sym_blank,
+                    report_cer=report_cer,
+                    report_wer=report_wer,
+                )
+            else:
+                self.error_calculator_trans = None
 
-        #         if self.ctc_weight != 0:
-        #             self.error_calculator = ErrorCalculator(
-        #                 token_list, sym_space, sym_blank, report_cer, report_wer
-        #             )
-        # else:
-        #     # we set self.decoder = None in the CTC mode since
-        #     # self.decoder parameters were never used and PyTorch complained
-        #     # and threw an Exception in the multi-GPU experiment.
-        #     # thanks Jeff Farris for pointing out the issue.
-        #     if ctc_weight == 1.0:
-        #         self.decoder = None
-        #     else:
-        #         self.decoder = decoder
+                if self.ctc_weight != 0:
+                    self.error_calculator = ErrorCalculator(
+                        token_list, sym_space, sym_blank, report_cer, report_wer
+                    )
+        else:
+            # we set self.decoder = None in the CTC mode since
+            # self.decoder parameters were never used and PyTorch complained
+            # and threw an Exception in the multi-GPU experiment.
+            # thanks Jeff Farris for pointing out the issue.
+            if ctc_weight == 1.0:
+                self.decoder = None
+            else:
+                self.decoder = decoder
 
-        #     self.criterion_att = LabelSmoothingLoss(
-        #         size=vocab_size,
-        #         padding_idx=ignore_id,
-        #         smoothing=lsm_weight,
-        #         normalize_length=length_normalized_loss,
-        #     )
+            self.criterion_att = LabelSmoothingLoss(
+                size=vocab_size,
+                padding_idx=ignore_id,
+                smoothing=lsm_weight,
+                normalize_length=length_normalized_loss,
+            )
 
         #     if report_cer or report_wer:
         self.error_calculator = ErrorCalculator(
@@ -311,53 +311,53 @@ class ESPnetASRModelCond3(AbsESPnetModel):
         #         1 - self.interctc_weight
         #     ) * loss_ctc + self.interctc_weight * loss_interctc
 
-        # if self.use_transducer_decoder:
-        #     # 2a. Transducer decoder branch
-        #     (
-        #         loss_transducer,
-        #         cer_transducer,
-        #         wer_transducer,
-        #     ) = self._calc_transducer_loss(
-        #         encoder_out,
-        #         encoder_out_lens,
-        #         text,
-        #     )
+        if self.use_transducer_decoder:
+            # 2a. Transducer decoder branch
+            (
+                loss_transducer,
+                cer_transducer,
+                wer_transducer,
+            ) = self._calc_transducer_loss(
+                encoder_out,
+                encoder_out_lens,
+                text,
+            )
 
-        #     if loss_ctc is not None:
-        #         loss = loss_transducer + (self.ctc_weight * loss_ctc)
-        #     else:
-        #         loss = loss_transducer
+            if loss_ctc is not None:
+                loss = loss_transducer + (self.ctc_weight * loss_ctc)
+            else:
+                loss = loss_transducer
 
-        #     # Collect Transducer branch stats
-        #     stats["loss_transducer"] = (
-        #         loss_transducer.detach() if loss_transducer is not None else None
-        #     )
-        #     stats["cer_transducer"] = cer_transducer
-        #     stats["wer_transducer"] = wer_transducer
+            # Collect Transducer branch stats
+            stats["loss_transducer"] = (
+                loss_transducer.detach() if loss_transducer is not None else None
+            )
+            stats["cer_transducer"] = cer_transducer
+            stats["wer_transducer"] = wer_transducer
 
-        # else:
-        #     # 2b. Attention decoder branch
-        #     if self.ctc_weight != 1.0:
-        #         loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-        #             encoder_out, encoder_out_lens, text, text_lengths
-        #         )
+        else:
+            # 2b. Attention decoder branch
+            if self.ctc_weight != 1.0:
+                loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
+                    encoder_out, encoder_out_lens, text, text_lengths
+                )
 
-        #     # 3. CTC-Att loss definition
-        #     if self.ctc_weight == 0.0:
-        #         loss = loss_att
-        #     elif self.ctc_weight == 1.0:
-        #         loss = loss_ctc
-        #     else:
-        #         loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
+            # 3. CTC-Att loss definition
+            if self.ctc_weight == 0.0:
+                loss = loss_att
+            elif self.ctc_weight == 1.0:
+                loss = loss_ctc
+            else:
+                loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
 
-        #     # Collect Attn branch stats
-        #     stats["loss_att"] = loss_att.detach() if loss_att is not None else None
-        #     stats["acc"] = acc_att
-        #     stats["cer"] = cer_att
-        #     stats["wer"] = wer_att
+            # Collect Attn branch stats
+            stats["loss_att"] = loss_att.detach() if loss_att is not None else None
+            stats["acc"] = acc_att
+            stats["cer"] = cer_att
+            stats["wer"] = wer_att
 
         # Collect total loss stats
-        loss = loss_ctc
+        # loss = loss_ctc
         stats["loss"] = loss.detach()
 
         # force_gatherable: to-device and to-tensor if scalar for DataParallel
