@@ -46,6 +46,7 @@ from espnet2.asr.espnet_model_cond1 import ESPnetASRModelCond1
 from espnet2.asr.espnet_model_cond2 import ESPnetASRModelCond2
 from espnet2.asr.espnet_model_cond3 import ESPnetASRModelCond3
 from espnet2.asr.espnet_model_cond3_2 import ESPnetASRModelCond3_2
+from espnet2.asr.espnet_model_cond4 import ESPnetASRModelCond4
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
 from espnet2.asr.frontend.fused import FusedFrontends
@@ -370,6 +371,11 @@ class ASRTask(AbsTask):
             default=False,
         )
         group.add_argument(
+            "--use_cond4",
+            type=str2bool,
+            default=False,
+        )
+        group.add_argument(
             "--use_conditioning",
             type=str2bool,
             default=True,
@@ -446,7 +452,7 @@ class ASRTask(AbsTask):
         return retval
 
     @classmethod
-    def build_model(cls, args: argparse.Namespace) -> Union[ESPnetASRModel, ESPnetASRModelCond1, ESPnetASRModelCond2, ESPnetASRModelCond3, ESPnetASRModelCond3_2]:
+    def build_model(cls, args: argparse.Namespace) -> Union[ESPnetASRModel, ESPnetASRModelCond1, ESPnetASRModelCond2, ESPnetASRModelCond3, ESPnetASRModelCond3_2, ESPnetASRModelCond4]:
         assert check_argument_types()
         if isinstance(args.token_list, str):
             with open(args.token_list, encoding="utf-8") as f:
@@ -547,6 +553,7 @@ class ASRTask(AbsTask):
         use_cond2 = getattr(args, "use_cond2", False)
         use_cond3 = getattr(args, "use_cond3", False)
         use_cond3_2 = getattr(args, "use_cond3_2", False)
+        use_cond4 = getattr(args, "use_cond4", False)
         use_conditioning = getattr(args, "use_conditioning", False)
         if use_cond1:
             # 4. Encoder Hier
@@ -676,6 +683,47 @@ class ASRTask(AbsTask):
 
             # 8. Build model
             model = ESPnetASRModelCond3_2(
+                vocab_size=vocab_size,
+                frontend=frontend,
+                specaug=specaug,
+                normalize=normalize,
+                preencoder=preencoder,
+                encoder_bi=encoder_hier,
+                encoder_en=encoder_en,
+                encoder_zh=encoder_zh,
+                postencoder=postencoder,
+                decoder=decoder,
+                ctc=ctc,
+                en_ctc=en_ctc,
+                zh_ctc=zh_ctc,
+                joint_network=joint_network,
+                token_list=token_list,
+                use_conditioning=use_conditioning,
+                vocab_range=args.vocab_range,
+                **args.model_conf,
+            )
+        elif use_cond4:
+            # 4. Encoder bi/en/zh
+            encoder_hier_class = encoder_hier_choices.get_class(args.encoder_hier)
+            if encoder_hier_class is not None:
+                encoder_hier = encoder_hier_class(input_size=encoder_output_size, **args.encoder_hier_conf)
+            else:
+                encoder_hier = None
+            encoder_en_class = encoder_choices.get_class(args.encoder)
+            encoder_en = encoder_class(input_size=input_size, **args.encoder_conf)
+            encoder_zh_class = encoder_choices.get_class(args.encoder)
+            encoder_zh = encoder_class(input_size=input_size, **args.encoder_conf)
+
+            # 6. Monolingual CTC
+            en_ctc = CTC(
+                odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
+            )
+            zh_ctc = CTC(
+                odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
+            )
+
+            # 8. Build model
+            model = ESPnetASRModelCond4(
                 vocab_size=vocab_size,
                 frontend=frontend,
                 specaug=specaug,
