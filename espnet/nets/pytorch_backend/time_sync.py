@@ -45,7 +45,8 @@ class TimeSyncBeamSearch(torch.nn.Module):
         ctc_weight: float=1.0,
         penalty: float=1.0,
         blank: int=0,
-        force_lid: bool=False
+        force_lid: bool=False,
+        temp: float=1.0,
     ):
         """
         beam_size: num hyps
@@ -71,6 +72,7 @@ class TimeSyncBeamSearch(torch.nn.Module):
         self.seen_prefixes = dict()     # cache for p_attn(Y|X)
         self.enc_output = None           # log p_ctc(Z|X)
         self.force_lid = force_lid
+        self.temp = temp
 
     def reset(self, enc_output: torch.Tensor):
         self.seen_prefixes = dict()
@@ -189,7 +191,8 @@ class TimeSyncBeamSearch(torch.nn.Module):
             list[Hypothesis]
         """
         logging.info("input length: " + str(enc_output.shape[1]))
-        lpz = self.ctc.log_softmax(enc_output)
+        # lpz = self.ctc.log_softmax(enc_output)
+        lpz = self.ctc.log_softmax_T(enc_output, T=self.temp)
         lpz = lpz.squeeze(0)
         lpz = lpz.cpu().detach().numpy()
         self.reset(enc_output)

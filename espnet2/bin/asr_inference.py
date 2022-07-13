@@ -81,6 +81,9 @@ class Speech2Text:
         streaming: bool = False,
         time_synchronous: bool = False,
         force_lid: bool = False,
+        temp: float = 1.0,
+        ctc_greedy: bool = False,
+        dump_posts: bool = False,
     ):
         assert check_argument_types()
 
@@ -111,7 +114,6 @@ class Speech2Text:
             )
 
         # 2. Build Language model
-        # import pdb;pdb.set_trace()
         if lm_train_config is not None:
             lm, lm_train_args = LMTask.build_model_from_file(
                 lm_train_config, lm_file, device
@@ -161,7 +163,8 @@ class Speech2Text:
                     decoder=lm.lm,
                     ctc_weight=ctc_weight,
                     penalty=penalty,
-                    force_lid=force_lid
+                    force_lid=force_lid,
+                    temp=temp,
                 )
             else:
                 beam_search = BeamSearch(
@@ -235,6 +238,8 @@ class Speech2Text:
         self.dtype = dtype
         self.nbest = nbest
         self.time_synchronous = time_synchronous
+        self.ctc_greedy = ctc_greedy
+        self.dump_posts = dump_posts
 
     @torch.no_grad()
     def __call__(
@@ -282,6 +287,26 @@ class Speech2Text:
         else:
             if self.time_synchronous:
                 nbest_hyps = self.beam_search.search(enc_output=enc)
+            elif self.ctc_greedy:
+                from itertools import groupby
+                lpz = self.asr_model.ctc.argmax(enc)
+                collapsed_indices = [x[0] for x in groupby(lpz[0])]
+                hyp = [x for x in filter(lambda x: x != 0, collapsed_indices)]
+                nbest_hyps = [{"score": 0.0, "yseq": [self.asr_model.sos] + hyp + [self.asr_model.eos]}]
+                nbest_hyps = [Hypothesis(
+                                score=hyp["score"],
+                                yseq=torch.tensor(hyp["yseq"]),
+                            ) for hyp in nbest_hyps]
+                
+                best_hyp = " ".join([str(x) for x in nbest_hyps[0].yseq.tolist()])
+                best_hyp_len = len(nbest_hyps[0].yseq)
+                best_score = nbest_hyps[0].score
+                logging.info(f"output length: {best_hyp_len}")
+                logging.info(f"best hyp: {best_hyp}")
+                logging.info(f"total log probability: {best_score:.2f}")
+
+                if self.dump_posts:
+                    post = self.asr_model.ctc.ctc_lo(enc)
             else:
                 nbest_hyps = self.beam_search(
                     x=enc[0], maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
@@ -313,7 +338,11 @@ class Speech2Text:
             results.append((text, token, token_int, hyp))
 
         assert check_return_type(results)
-        return results
+
+        if self.dump_posts:
+            return results, post
+        else:
+            return results
 
     @staticmethod
     def from_pretrained(
@@ -379,6 +408,9 @@ def inference(
     streaming: bool,
     time_synchronous: bool,
     force_lid: bool,
+    temp: float,
+    ctc_greedy: float,
+    dump_posts: float,
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -424,6 +456,9 @@ def inference(
         streaming=streaming,
         time_synchronous=time_synchronous,
         force_lid=force_lid,
+        temp=temp,
+        ctc_greedy=ctc_greedy,
+        dump_posts=dump_posts,
     )
     speech2text = Speech2Text.from_pretrained(
         model_tag=model_tag,
@@ -442,6 +477,9 @@ def inference(
         allow_variable_data_keys=allow_variable_data_keys,
         inference=True,
     )
+
+    if speech2text.dump_posts:
+        posts = {}
 
     # 7 .Start for-loop
     # FIXME(kamo): The output format should be discussed about
@@ -463,6 +501,13 @@ def inference(
 
             # Only supporting batch_size==1
             key = keys[0]
+
+            # dump posts
+            if speech2text.dump_posts:
+                post = results[1]
+                results = results[0]
+                posts[key] = post
+
             for n, (text, token, token_int, hyp) in zip(range(1, nbest + 1), results):
                 # Create a directory: outdir/{n}best_recog
                 ibest_writer = writer[f"{n}best_recog"]
@@ -475,6 +520,10 @@ def inference(
                 if text is not None:
                     ibest_writer["text"][key] = text
 
+        if speech2text.dump_posts:      
+            dst = output_dir+"/post.npz"
+            import numpy as np
+            np.savez(dst, **posts)
 
 def get_parser():
     parser = config_argparse.ArgumentParser(
@@ -636,6 +685,21 @@ def get_parser():
         type=str2bool,
         default=False,
         help="Use time sync",
+    )
+    group.add_argument(
+        "--temp",
+        type=float,
+        default=1.0,
+    )
+    group.add_argument(
+        "--ctc_greedy",
+        type=str2bool,
+        default=False,
+    )
+    group.add_argument(
+        "--dump_posts",
+        type=str2bool,
+        default=False,
     )
 
     return parser
