@@ -584,6 +584,8 @@ class ASRTask(AbsTask):
                 zh_ctc=zh_ctc,
                 joint_network=joint_network,
                 token_list=token_list,
+                use_conditioning=use_conditioning,
+                vocab_range=args.vocab_range,
                 **args.model_conf,
             )
         elif use_cond2:
