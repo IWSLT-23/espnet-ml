@@ -42,7 +42,7 @@ from espnet2.utils.types import str2triple_str
 from espnet2.utils.types import str_or_none
 
 from espnet.nets.pytorch_backend.time_sync import TimeSyncBeamSearch
-
+from espnet.nets.pytorch_backend.time_sync_joint import TimeSyncBeamSearchJoint
 
 class Speech2Text:
     """Speech2Text class
@@ -84,6 +84,8 @@ class Speech2Text:
         temp: float = 1.0,
         ctc_greedy: bool = False,
         dump_posts: bool = False,
+        joint_decode: bool = False,
+        mono_weight: float = 0.5,
     ):
         assert check_argument_types()
 
@@ -93,7 +95,7 @@ class Speech2Text:
             asr_train_config, asr_model_file, device
         )
         asr_model.to(dtype=getattr(torch, dtype)).eval()
-
+        
         if hasattr(asr_model, "decoder"):
             decoder = asr_model.decoder
         else:
@@ -156,7 +158,8 @@ class Speech2Text:
             )
 
             if time_synchronous:
-                beam_search = TimeSyncBeamSearch(
+                if joint_decode:
+                    beam_search = TimeSyncBeamSearchJoint(
                     beam_size=beam_size,
                     ctc=asr_model.ctc,
                     sos=asr_model.sos,
@@ -165,7 +168,22 @@ class Speech2Text:
                     penalty=penalty,
                     force_lid=force_lid,
                     temp=temp,
+                    joint_decode=joint_decode,
+                    mono_weight=mono_weight,
+                    en_ctc=asr_model.en_ctc,
+                    zh_ctc=asr_model.zh_ctc,
                 )
+                else:
+                    beam_search = TimeSyncBeamSearch(
+                        beam_size=beam_size,
+                        ctc=asr_model.ctc,
+                        sos=asr_model.sos,
+                        decoder=lm.lm,
+                        ctc_weight=ctc_weight,
+                        penalty=penalty,
+                        force_lid=force_lid,
+                        temp=temp,
+                    )
             else:
                 beam_search = BeamSearch(
                     beam_size=beam_size,
@@ -240,6 +258,8 @@ class Speech2Text:
         self.time_synchronous = time_synchronous
         self.ctc_greedy = ctc_greedy
         self.dump_posts = dump_posts
+        self.dump_align = dump_align
+        self.joint_decode = joint_decode
 
     @torch.no_grad()
     def __call__(
@@ -276,7 +296,10 @@ class Speech2Text:
         batch = to_device(batch, device=self.device)
 
         # b. Forward Encoder
-        enc, _ = self.asr_model.encode(**batch)
+        if self.joint_decode:
+            enc, en_enc, zh_enc = self.asr_model.encode_joint(**batch)
+        else:
+            enc, _ = self.asr_model.encode(**batch)
         if isinstance(enc, tuple):
             enc = enc[0]
         assert len(enc) == 1, len(enc)
@@ -286,7 +309,10 @@ class Speech2Text:
             nbest_hyps = self.beam_search_transducer(enc[0])
         else:
             if self.time_synchronous:
-                nbest_hyps = self.beam_search.search(enc_output=enc)
+                if self.joint_decode:
+                    nbest_hyps = self.beam_search.search(enc_output=enc, en_enc_output=en_enc, zh_enc_output=zh_enc)
+                else:
+                    nbest_hyps = self.beam_search.search(enc_output=enc)
             elif self.ctc_greedy:
                 from itertools import groupby
                 lpz = self.asr_model.ctc.argmax(enc)
@@ -307,6 +333,10 @@ class Speech2Text:
 
                 if self.dump_posts:
                     post = self.asr_model.ctc.ctc_lo(enc)
+
+                if self.dump_align:
+                    import pdb;pdb.set_trace()
+                    align = ",".join([str(v) for v in lpz[0]])
             else:
                 nbest_hyps = self.beam_search(
                     x=enc[0], maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
@@ -341,6 +371,8 @@ class Speech2Text:
 
         if self.dump_posts:
             return results, post
+        elif self.dump_align:
+            return results, align
         else:
             return results
 
@@ -411,6 +443,9 @@ def inference(
     temp: float,
     ctc_greedy: float,
     dump_posts: float,
+    dump_align: float = False,
+    joint_decode: bool = False,
+    mono_weight: float = 0.5,
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -459,6 +494,9 @@ def inference(
         temp=temp,
         ctc_greedy=ctc_greedy,
         dump_posts=dump_posts,
+        joint_decode=joint_decode,
+        mono_weight=mono_weight,
+        dump_align=dump_align,
     )
     speech2text = Speech2Text.from_pretrained(
         model_tag=model_tag,
@@ -480,6 +518,8 @@ def inference(
 
     if speech2text.dump_posts:
         posts = {}
+    if speech2text.dump_align:
+        aligns = {}
 
     # 7 .Start for-loop
     # FIXME(kamo): The output format should be discussed about
@@ -508,6 +548,12 @@ def inference(
                 results = results[0]
                 posts[key] = post
 
+            # dump align
+            if speech2text.dump_align:
+                align = results[1]
+                results = results[0]
+                aligns[key] = align
+
             for n, (text, token, token_int, hyp) in zip(range(1, nbest + 1), results):
                 # Create a directory: outdir/{n}best_recog
                 ibest_writer = writer[f"{n}best_recog"]
@@ -524,6 +570,11 @@ def inference(
             dst = output_dir+"/post.npz"
             import numpy as np
             np.savez(dst, **posts)
+
+        if speech2text.dump_align:      
+            dst = output_dir+"/align.json"
+            import json
+            json.dump(aligns, open(dst,"w"), indent=2)
 
 def get_parser():
     parser = config_argparse.ArgumentParser(
@@ -698,6 +749,21 @@ def get_parser():
     )
     group.add_argument(
         "--dump_posts",
+        type=str2bool,
+        default=False,
+    )
+    group.add_argument(
+        "--joint_decode",
+        type=str2bool,
+        default=False,
+    )
+    group.add_argument(
+        "--mono_weight",
+        type=float,
+        default=0.5,
+    )
+    group.add_argument(
+        "--dump_align",
         type=str2bool,
         default=False,
     )
