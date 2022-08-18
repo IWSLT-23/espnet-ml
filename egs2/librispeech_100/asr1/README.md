@@ -29,6 +29,10 @@ Model: https://huggingface.co/pyf98/librispeech_100h_conformer
 |beam20_ctc0.3/dev_other|2864|50948|84.6|13.9|1.5|2.1|17.4|79.9|
 |beam20_ctc0.3/test_clean|2620|52576|94.3|5.3|0.4|0.8|6.5|57.0|
 |beam20_ctc0.3/test_other|2939|52343|84.7|13.7|1.6|2.0|17.3|81.6|
+|time_sync_beam20_ctc0.3/dev_clean|2703|54402|94.5|5.1|0.4|0.7|6.2|56.1|
+|time_sync_beam20_ctc0.3/dev_other|2864|50948|84.1|13.5|2.5|1.8|17.7|79.8|
+|time_sync_beam20_ctc0.3/test_clean|2620|52576|94.3|5.2|0.5|0.7|6.4|56.6|
+|time_sync_beam20_ctc0.3/test_other|2939|52343|84.3|13.5|2.2|1.8|17.5|81.6|
 
 ### CER
 
@@ -42,6 +46,10 @@ Model: https://huggingface.co/pyf98/librispeech_100h_conformer
 |beam20_ctc0.3/dev_other|2864|265951|93.3|4.2|2.5|2.0|8.7|79.9|
 |beam20_ctc0.3/test_clean|2620|281530|98.1|1.1|0.8|0.6|2.5|57.0|
 |beam20_ctc0.3/test_other|2939|272758|93.5|4.0|2.6|1.9|8.4|81.6|
+|time_sync_beam20_ctc0.3/dev_clean|2703|288456|98.1|1.1|0.8|0.6|2.5|56.1|
+|time_sync_beam20_ctc0.3/dev_other|2864|265951|92.3|3.9|3.7|1.8|9.5|79.8|
+|time_sync_beam20_ctc0.3/test_clean|2620|281530|98.1|1.0|0.8|0.6|2.5|56.6|
+|time_sync_beam20_ctc0.3/test_other|2939|272758|92.8|3.8|3.4|1.8|9.0|81.6|
 
 ### TER
 
@@ -55,7 +63,10 @@ Model: https://huggingface.co/pyf98/librispeech_100h_conformer
 |beam20_ctc0.3/dev_other|2864|64524|81.0|13.5|5.5|2.3|21.3|79.9|
 |beam20_ctc0.3/test_clean|2620|66983|92.0|5.0|3.0|0.6|8.6|57.0|
 |beam20_ctc0.3/test_other|2939|66650|81.2|13.0|5.8|2.0|20.9|81.6|
-
+|time_sync_beam20_ctc0.3/dev_clean|2703|69558|91.9|4.9|3.3|0.5|8.7|56.1|
+|time_sync_beam20_ctc0.3/dev_other|2864|64524|80.2|12.7|7.0|1.9|21.7|79.8|
+|time_sync_beam20_ctc0.3/test_clean|2620|66983|92.0|4.8|3.2|0.6|8.6|56.6|
+|time_sync_beam20_ctc0.3/test_other|2939|66650|80.6|12.5|6.9|1.8|21.2|81.6|
 
 
 ## Environments
