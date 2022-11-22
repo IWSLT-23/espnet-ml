@@ -51,8 +51,8 @@ tgt_case=tc
 remove_nonverbal=true  # remove non-verbal labels such as "( Applaus )"
 # NOTE: IWSLT community accepts this setting and therefore we use this by default
 
-# mtedx_datadir=download # original data directory to be stored
-mtedx_datadir=/n/work3/inaguma/mTEDx # original data directory to be stored
+mtedx_datadir=download # original data directory to be stored
+#mtedx_datadir=/n/work3/inaguma/mTEDx # original data directory to be stored
 
 # language related
 src_lang=es
@@ -141,6 +141,10 @@ if [[ ${is_exist} == false ]]; then
     echo "No language direction: ${src_lang} to ${tgt_lang}" && exit 1;
 fi
 
+if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
+    wget "https://us.openslr.org/resources/100/mtedx_${src_lang}-${tgt_lang}.tgz" -P ${mtedx_datadir}/ --no-check-certificate
+    tar -xvf "${mtedx_datadir}/mtedx_${src_lang}-${tgt_lang}.tgz" -C ${mtedx_datadir}
+fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
     ### Task dependent. You have to make data the following preparation part by yourself.

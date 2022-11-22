@@ -25,6 +25,7 @@ src_case=lc.rm
 tgt_case=tc
 
 ./st.sh \
+    --use_lm false \
     --stage 1 \
     --stop_stage 13 \
     --local_data_opts "${tgt_lang}" \

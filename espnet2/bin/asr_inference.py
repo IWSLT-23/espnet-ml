@@ -41,6 +41,7 @@ from espnet2.utils.types import str2bool
 from espnet2.utils.types import str2triple_str
 from espnet2.utils.types import str_or_none
 
+from espnet.nets.pytorch_backend.beam_search_ctc import BeamSearchCTC
 
 class Speech2Text:
     """Speech2Text class
@@ -77,6 +78,8 @@ class Speech2Text:
         penalty: float = 0.0,
         nbest: int = 1,
         streaming: bool = False,
+        time_synchronous: bool=False,
+        ctc_greedy: bool = False,
     ):
         assert check_argument_types()
 
@@ -139,46 +142,57 @@ class Speech2Text:
                 ngram=ngram_weight,
                 length_bonus=penalty,
             )
-            beam_search = BeamSearch(
-                beam_size=beam_size,
-                weights=weights,
-                scorers=scorers,
-                sos=asr_model.sos,
-                eos=asr_model.eos,
-                vocab_size=len(token_list),
-                token_list=token_list,
-                pre_beam_score_key=None if ctc_weight == 1.0 else "full",
-            )
+            if time_synchronous:
+                beam_search = BeamSearchCTC(
+                    beam_size=beam_size,
+                    ctc=asr_model.ctc,
+                    sos=asr_model.sos,
+                    lm=decoder,
+                    lm_weight=1.0-ctc_weight,
+                    # pruning_width=pruning_width,
+                    insertion_bonus=penalty,
+                )
+            else:
+                beam_search = BeamSearch(
+                    beam_size=beam_size,
+                    weights=weights,
+                    scorers=scorers,
+                    sos=asr_model.sos,
+                    eos=asr_model.eos,
+                    vocab_size=len(token_list),
+                    token_list=token_list,
+                    pre_beam_score_key=None if ctc_weight == 1.0 else "full",
+                )
 
-            # TODO(karita): make all scorers batchfied
-            if batch_size == 1:
-                non_batch = [
-                    k
-                    for k, v in beam_search.full_scorers.items()
-                    if not isinstance(v, BatchScorerInterface)
-                ]
-                if len(non_batch) == 0:
-                    if streaming:
-                        beam_search.__class__ = BatchBeamSearchOnlineSim
-                        beam_search.set_streaming_config(asr_train_config)
-                        logging.info(
-                            "BatchBeamSearchOnlineSim implementation is selected."
-                        )
+                # TODO(karita): make all scorers batchfied
+                if batch_size == 1:
+                    non_batch = [
+                        k
+                        for k, v in beam_search.full_scorers.items()
+                        if not isinstance(v, BatchScorerInterface)
+                    ]
+                    if len(non_batch) == 0:
+                        if streaming:
+                            beam_search.__class__ = BatchBeamSearchOnlineSim
+                            beam_search.set_streaming_config(asr_train_config)
+                            logging.info(
+                                "BatchBeamSearchOnlineSim implementation is selected."
+                            )
+                        else:
+                            beam_search.__class__ = BatchBeamSearch
+                            logging.info("BatchBeamSearch implementation is selected.")
                     else:
-                        beam_search.__class__ = BatchBeamSearch
-                        logging.info("BatchBeamSearch implementation is selected.")
-                else:
-                    logging.warning(
-                        f"As non-batch scorers {non_batch} are found, "
-                        f"fall back to non-batch implementation."
-                    )
+                        logging.warning(
+                            f"As non-batch scorers {non_batch} are found, "
+                            f"fall back to non-batch implementation."
+                        )
 
-            beam_search.to(device=device, dtype=getattr(torch, dtype)).eval()
-            for scorer in scorers.values():
-                if isinstance(scorer, torch.nn.Module):
-                    scorer.to(device=device, dtype=getattr(torch, dtype)).eval()
-            logging.info(f"Beam_search: {beam_search}")
-            logging.info(f"Decoding device={device}, dtype={dtype}")
+                beam_search.to(device=device, dtype=getattr(torch, dtype)).eval()
+                for scorer in scorers.values():
+                    if isinstance(scorer, torch.nn.Module):
+                        scorer.to(device=device, dtype=getattr(torch, dtype)).eval()
+                logging.info(f"Beam_search: {beam_search}")
+                logging.info(f"Decoding device={device}, dtype={dtype}")
 
         # 5. [Optional] Build Text converter: e.g. bpe-sym -> Text
         if token_type is None:
@@ -209,6 +223,8 @@ class Speech2Text:
         self.device = device
         self.dtype = dtype
         self.nbest = nbest
+        self.time_synchronous = time_synchronous
+        self.ctc_greedy = ctc_greedy
 
     @torch.no_grad()
     def __call__(
@@ -254,9 +270,26 @@ class Speech2Text:
         if self.beam_search_transducer:
             nbest_hyps = self.beam_search_transducer(enc[0])
         else:
-            nbest_hyps = self.beam_search(
-                x=enc[0], maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
-            )
+            if self.ctc_greedy:
+                from itertools import groupby
+                lpz = self.asr_model.ctc.argmax(enc)
+                collapsed_indices = [x[0] for x in groupby(lpz[0])]
+                hyp = [x for x in filter(lambda x: x != 0, collapsed_indices)]
+                nbest_hyps = [{"score": 0.0, "yseq": [self.asr_model.sos] + hyp + [self.asr_model.eos]}]
+                nbest_hyps = [Hypothesis(
+                                score=hyp["score"],
+                                yseq=torch.tensor(hyp["yseq"]),
+                            ) for hyp in nbest_hyps]
+            elif self.time_synchronous:
+                nbest_hyps = self.beam_search.search(enc_output=enc)
+                nbest_hyps = [Hypothesis(
+                                score=hyp["score"],
+                                yseq=torch.tensor(hyp["yseq"]),
+                            ) for hyp in nbest_hyps]
+            else:
+                nbest_hyps = self.beam_search(
+                    x=enc[0], maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
+                )
 
         nbest_hyps = nbest_hyps[: self.nbest]
 
@@ -348,6 +381,8 @@ def inference(
     allow_variable_data_keys: bool,
     transducer_conf: Optional[dict],
     streaming: bool,
+    time_synchronous: bool,
+    ctc_greedy: bool,
 ):
     assert check_argument_types()
     if batch_size > 1:
@@ -391,6 +426,8 @@ def inference(
         penalty=penalty,
         nbest=nbest,
         streaming=streaming,
+        time_synchronous=time_synchronous,
+        ctc_greedy=ctc_greedy,
     )
     speech2text = Speech2Text.from_pretrained(
         model_tag=model_tag,
@@ -591,6 +628,18 @@ def get_parser():
         default=None,
         help="The model path of sentencepiece. "
         "If not given, refers from the training args",
+    )
+    group.add_argument(
+        "--time_synchronous",
+        type=str2bool,
+        default=False,
+        help="Use time sync",
+    )
+    group.add_argument(
+        "--ctc_greedy",
+        type=str2bool,
+        default=False,
+        help="Use ctc greedy",
     )
 
     return parser

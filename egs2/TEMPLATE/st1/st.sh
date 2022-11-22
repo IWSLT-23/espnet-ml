@@ -294,7 +294,7 @@ else
 fi
 
 # Extra files for translation process
-utt_extra_files="text.${src_case}.${src_lang} text.${tgt_case}.${tgt_lang}"
+utt_extra_files="text.${src_case}.${src_lang} text.${tgt_case}.${tgt_lang} utt2category"
 # Use the same text as ST for bpe training if not specified.
 [ -z "${src_bpe_train_text}" ] && src_bpe_train_text="${data_feats}/${train_set}/text.${src_case}.${src_lang}"
 [ -z "${tgt_bpe_train_text}" ] && tgt_bpe_train_text="${data_feats}/${train_set}/text.${tgt_case}.${tgt_lang}"
@@ -1310,8 +1310,6 @@ if ! "${skip_train}"; then
                 --valid_shape_file "${st_stats_dir}/valid/text_shape.${tgt_token_type}" \
                 --valid_shape_file "${st_stats_dir}/valid/src_text_shape.${src_token_type}" \
                 --resume true \
-                --init_param ${pretrained_asr} \
-                --ignore_init_mismatch ${ignore_init_mismatch} \
                 --fold_length "${_fold_length}" \
                 --fold_length "${st_text_fold_length}" \
                 --fold_length "${st_text_fold_length}" \
@@ -1484,6 +1482,8 @@ if ! "${skip_eval}"; then
             perl -pe 's/\([^\)]+\)//g;' "${_scoredir}/hyp.trn.org" > "${_scoredir}/hyp.trn"
 
             # detokenizer
+            sed -i 's/^[ \t]*//;s/[ \t]*$//' "${_scoredir}/ref.trn"
+            sed -i 's/^[ \t]*//;s/[ \t]*$//' "${_scoredir}/hyp.trn"
             detokenizer.perl -l ${tgt_lang} -q < "${_scoredir}/ref.trn" > "${_scoredir}/ref.trn.detok"
             detokenizer.perl -l ${tgt_lang} -q < "${_scoredir}/hyp.trn" > "${_scoredir}/hyp.trn.detok"
 
@@ -1495,6 +1495,7 @@ if ! "${skip_eval}"; then
                           >> ${_scoredir}/result.tc.txt
                 
                 log "Write a case-sensitive BLEU (single-reference) result in ${_scoredir}/result.tc.txt"
+                cat ${_scoredir}/result.tc.txt
             fi
 
             # detokenize & remove punctuation except apostrophe
@@ -1548,6 +1549,14 @@ if ! "${skip_eval}"; then
                     >> ${_scoredir}/result.lc.txt
                 log "Write a case-insensitve BLEU (multi-reference) result in ${_scoredir}/result.lc.txt"
             fi
+
+            python local/score_langs.py --utt2category data/${dset}/utt2category --dir ${_scoredir}
+            . ./local/score_langs.sh ${_scoredir}
+
+            cut -d' ' -f3- "${_data}/text.lc.rm.lid.all" > "${_scoredir}/src_ref.trn.lc.rm"
+            detokenizer.perl -l ${src_lang} -q < "${_scoredir}/src_ref.trn.lc.rm" > "${_scoredir}/src_ref.trn.detok.lc.rm"
+            python local/score_verbosity.py --utt2category data/${dset}/utt2category --dir ${_scoredir}
+            
         done
 
         # Show results in Markdown syntax
