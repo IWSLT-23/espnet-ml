@@ -85,6 +85,11 @@ class DummyAgent(SpeechToTextAgent):
                 **speech2text_kwargs,
             )
         else:
+            if kwargs['rnnt']:
+                transducer_conf = {"search_type":"tsd2", "score_norm":True, "max_sym_exp":8}
+            else:
+                transducer_conf = None
+
             speech2text_kwargs = dict(
                 st_train_config=kwargs['st_train_config'],
                 st_model_file=kwargs['st_model_file'],
@@ -107,11 +112,17 @@ class DummyAgent(SpeechToTextAgent):
                 time_sync=kwargs['time_sync'],
                 incremental_decode=kwargs['incremental_decode'],
                 blank_penalty=kwargs['blank_penalty'],
+                hold_n=kwargs['hold_n'],
+                transducer_conf=transducer_conf,
+                hugging_face_decoder=kwargs['hugging_face_decoder'],
             )
             self.speech2text = Speech2TextStreaming(**speech2text_kwargs)
         
         self.sim_chunk_length = kwargs['sim_chunk_length']
         self.backend = kwargs['backend']
+        self.token_delay = kwargs['token_delay']
+        self.lang = kwargs['lang']
+        self.recompute = kwargs['recompute']
         self.clean()
 
     @staticmethod
@@ -359,6 +370,32 @@ class DummyAgent(SpeechToTextAgent):
             type=float,
             default=1.0,
         )
+        group.add_argument(
+            "--hold_n",
+            type=int,
+            default=0,
+        )
+        group.add_argument(
+            "--token_delay",
+            type=str2bool,
+            default=True,
+        )
+        group.add_argument(
+            "--rnnt",
+            type=str2bool,
+            default=False,
+        )
+        group.add_argument(
+            "--lang",
+            type=str,
+            default="de",
+        )
+        group.add_argument("--hugging_face_decoder", type=str2bool, default=False)
+        group.add_argument(
+            "--recompute",
+            type=str2bool,
+            default=False,
+        )
 
         return parser
 
@@ -385,7 +422,10 @@ class DummyAgent(SpeechToTextAgent):
         else:
             unread_length = len(self.states.source) - self.processed_index - 1
             if unread_length >= self.sim_chunk_length or self.states.source_finished:
-                speech = torch.tensor(self.states.source[self.processed_index+1:])
+                if self.recompute:
+                    speech = torch.tensor(self.states.source)
+                else:
+                    speech = torch.tensor(self.states.source[self.processed_index+1:])
                 results = self.speech2text(speech=speech, is_final=self.states.source_finished)
                 self.processed_index = len(self.states.source) - 1
                 if not self.states.source_finished:
@@ -400,13 +440,16 @@ class DummyAgent(SpeechToTextAgent):
                     else:
                         return ReadAction()
                 else:
-                    prediction = results[0][0]
+                    if len(results) > 0:
+                        prediction = results[0][0]
+                    else:
+                        prediction = self.prev_prediction
 
                 if prediction != self.prev_prediction or self.states.source_finished:
                     self.prev_prediction = prediction
-                    prediction = MosesDetokenizer('de')(prediction.split(" "))
+                    prediction = MosesDetokenizer(self.lang)(prediction.split(" "))
                     
-                    if not self.states.source_finished:
+                    if self.token_delay and not self.states.source_finished:
                         prediction = prediction.rsplit(" ",1)
                         if len(prediction) == 1:
                             prediction = ""
