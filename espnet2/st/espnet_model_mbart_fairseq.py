@@ -28,7 +28,7 @@ from espnet.nets.pytorch_backend.transformer.add_sos_eos import add_sos_eos
 from espnet.nets.pytorch_backend.transformer.label_smoothing_loss import (  # noqa: H301
     LabelSmoothingLoss,
 )
-import pdb
+
 if V(torch.__version__) >= V("1.6.0"):
     from torch.cuda.amp import autocast
 else:
@@ -80,7 +80,6 @@ class ESPnetSTModel(AbsESPnetModel):
         tgt_sym_sos: str = "<sos/eos>",
         tgt_sym_eos: str = "<sos/eos>",
         lang_token_id: int = -1,
-        st_comb: float = 0.7,
     ):
         assert check_argument_types()
         assert 0.0 <= asr_weight < 1.0, "asr_weight should be [0.0, 1.0)"
@@ -115,10 +114,7 @@ class ESPnetSTModel(AbsESPnetModel):
         self.normalize = normalize
         self.preencoder = preencoder
         self.postencoder = postencoder
-        #AH
         self.hier_encoder = hier_encoder
-        #self.hier_encoder = postencoder
-        self.st_comb = st_comb
         self.encoder = encoder
         if self.st_mtlalpha < 1.0:
             self.decoder = (
@@ -267,28 +263,29 @@ class ESPnetSTModel(AbsESPnetModel):
             src_text = src_text[:, : src_text_lengths.max()]
 
         # 1. Encoder
-        #pdb.set_trace()
-        # if self.hier_encoder is not None:
-            
-        st_encoder_out, st_encoder_out_lens, asr_encoder_out, asr_encoder_out_lens = self.encode(speech, speech_lengths, return_int_enc=True)
-        # else:
-        #     st_encoder_out, st_encoder_out_lens = self.encode(speech, speech_lengths)
-        #     asr_encoder_out, asr_encoder_out_lens = st_encoder_out, st_encoder_out_lens
-        
-        #asr_encoder_out, asr_encoder_out_lens = self.encode(speech, speech_lengths)
-
+        if self.hier_encoder is not None:
+            st_encoder_out, st_encoder_out_lens, asr_encoder_out, asr_encoder_out_lens = self.encode(speech, speech_lengths, return_int_enc=True)
+        else:
+            st_encoder_out, st_encoder_out_lens = self.encode(speech, speech_lengths)
+            asr_encoder_out, asr_encoder_out_lens = st_encoder_out, st_encoder_out_lens
 
         # 2a. CTC branch
         if self.asr_weight > 0:
             assert src_text is not None, "missing source text for asr sub-task of ST"
 
-        #if self.asr_weight > 0 and self.mtlalpha > 0:
-        if self.mtlalpha > 0:
+        if self.asr_weight > 0 and self.mtlalpha > 0:
             loss_asr_ctc, cer_asr_ctc = self._calc_asr_ctc_loss(
                 asr_encoder_out, asr_encoder_out_lens, src_text, src_text_lengths
             )
         else:
             loss_asr_ctc, cer_asr_ctc = 0.0, None
+
+        if self.st_mtlalpha > 0:
+            loss_st_ctc, bleu_st_ctc = self._calc_mt_ctc_loss(
+                st_encoder_out, st_encoder_out_lens, text, text_lengths
+            )
+        else:
+            loss_st_ctc, bleu_st_ctc = 0.0, None
 
         # 2b. Attention-decoder branch (extra ASR)
         if self.asr_weight > 0 and self.mtlalpha < 1.0:
@@ -303,16 +300,7 @@ class ESPnetSTModel(AbsESPnetModel):
             )
         else:
             loss_asr_att, acc_asr_att, cer_asr_att, wer_asr_att = 0.0, None, None, None
-            
-        # ctc loss fails with mbart encoder
-        #pdb.set_trace()
-        if self.st_mtlalpha > 0:
-            loss_st_ctc, bleu_st_ctc = self._calc_mt_ctc_loss(
-                st_encoder_out, st_encoder_out_lens, text, text_lengths
-            )
-        # else:
-        #     loss_st_ctc, bleu_st_ctc = 0.0, None
-        #loss_st_ctc, bleu_st_ctc = 0.0, None
+
         # 2c. Attention-decoder branch (extra MT)
         if self.mt_weight > 0:
             loss_mt_att, acc_mt_att = self._calc_mt_att_loss(
@@ -329,10 +317,10 @@ class ESPnetSTModel(AbsESPnetModel):
             speech_out = None
             speech_lens = None
 
-        # if self.use_multidecoder:
-        #     dec_asr_lengths = src_text_lengths + 1
-        #     st_encoder_out, st_encoder_out_lens, _ = self.md_encoder(hs_dec_asr, dec_asr_lengths)
-
+        if self.use_multidecoder:
+            dec_asr_lengths = src_text_lengths + 1
+            st_encoder_out, st_encoder_out_lens, _ = self.md_encoder(hs_dec_asr, dec_asr_lengths)
+        
         st_ctc_weight = self.st_mtlalpha
         if st_ctc_weight < 1.0:
             if self.st_use_transducer_decoder:
@@ -360,15 +348,10 @@ class ESPnetSTModel(AbsESPnetModel):
                 bleu_st_att = None
             else:
                 # 2e. Attention-decoder branch (ST)
-                
                 loss_st_att, acc_st_att, bleu_st_att = self._calc_mt_att_loss(
                     st_encoder_out, st_encoder_out_lens, text, text_lengths, speech_out, speech_lens, st=True
                 )
-                # AH to be explored in the future
-                # loss_st_att2, _ , _ = self._calc_mt_att_loss(
-                #     asr_encoder_out, asr_encoder_out_lens, text, text_lengths, speech_out, speech_lens, st=True
-                # )
-                # loss_st_att = self.st_comb * loss_st_att1 + (1-self.st_comb) * loss_st_att2
+
                 if st_ctc_weight == 1.0:
                     loss_st = loss_st_ctc
                 elif st_ctc_weight == 0.0:
@@ -480,12 +463,12 @@ class ESPnetSTModel(AbsESPnetModel):
         if return_int_enc:
             int_encoder_out, int_encoder_out_lens = encoder_out, encoder_out_lens
 
-        # if self.hier_encoder is not None:
-        #     encoder_out_hier, encoder_out_lens_hier = self.hier_encoder(asr_encoder_out, asr_encoder_out_lens)
+        if self.hier_encoder is not None:
+            encoder_out, encoder_out_lens, _ = self.hier_encoder(encoder_out, encoder_out_lens)
 
         # Post-encoder, e.g. NLU
         if self.postencoder is not None:
-            encoder_out_hier, encoder_out_lens_hier = self.postencoder(
+            encoder_out, encoder_out_lens = self.postencoder(
                 encoder_out, encoder_out_lens
             )
 
@@ -499,7 +482,7 @@ class ESPnetSTModel(AbsESPnetModel):
         )
 
         if return_int_enc:
-            return encoder_out_hier, encoder_out_lens_hier, int_encoder_out, int_encoder_out_lens
+            return encoder_out, encoder_out_lens, int_encoder_out, int_encoder_out_lens
         return encoder_out, encoder_out_lens
 
     def _extract_feats(

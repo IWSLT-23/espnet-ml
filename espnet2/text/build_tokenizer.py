@@ -22,7 +22,7 @@ def build_tokenizer(
 ) -> AbsTokenizer:
     """A helper function to instantiate Tokenizer"""
     assert check_argument_types()
-    if token_type == "bpe":
+    if token_type == "bpe" or token_type == "fairseq":
         if bpemodel is None:
             raise ValueError('bpemodel is required if token_type = "bpe"')
 
